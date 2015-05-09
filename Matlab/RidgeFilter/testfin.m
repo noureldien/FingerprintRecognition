@@ -24,6 +24,7 @@ function [newim, binim, mask] =  testfin(im, blksze, thresh, gradientsigma, bloc
 
 % identify ridge-like regions and normalise image
 [normim, mask] = ridgesegment(im, blksze, thresh);
+show(normim);
 
 % determine ridge orientations
 orientim = ridgeorient(normim, gradientsigma, blocksigma, orientsmoothsigma);

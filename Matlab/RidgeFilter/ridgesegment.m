@@ -49,7 +49,6 @@ im = normalise(im,0,1);
 fun = inline('std(x(:))*ones(size(x))');
 stddevim = blkproc(im, [blksze blksze], fun);
 mask = stddevim > thresh;
-
 maskind = find(mask);
 
 % Renormalise image so that the *ridge regions* have zero mean, unit

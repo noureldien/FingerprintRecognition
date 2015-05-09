@@ -84,9 +84,9 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item){
+    public boolean onOptionsItemSelected(MenuItem item) {
 
-        switch (item.getItemId()){
+        switch (item.getItemId()) {
             case android.R.id.home:
                 // exist the application by finishing the Camera activity
                 this.finish();
@@ -251,6 +251,14 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
         int colStart = (int) ((width - axes.width * 2) / 2);
         int rowStart = ((int) (height - axes.height * 2) / 2);
         matGrayScale = matGrayScale.submat(new Rect(colStart, rowStart, (int) axes.width * 2, (int) axes.height * 2));
+
+        // now scale the image
+        //float scaleFactor = 1 / 4;
+        //int newWidth = (int) (matGrayScale.cols() * scaleFactor);
+        //int newHeight = height * newWidth / width;
+        //Mat matScaled = new Mat(newHeight, newWidth, CvType.CV_8UC1);
+        //Imgproc.resize(matGrayScale, matScaled, new Size(newWidth, newHeight));
+        //return matScaled;
 
         return matGrayScale;
     }

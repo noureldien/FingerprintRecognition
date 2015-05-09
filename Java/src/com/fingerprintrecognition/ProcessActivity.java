@@ -13,6 +13,7 @@ import org.opencv.android.Utils;
 import org.opencv.core.*;
 import org.opencv.imgproc.Imgproc;
 
+import java.security.SecureClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -111,46 +112,46 @@ public class ProcessActivity extends Activity {
         int height = MatSnapShot.height();
 
         // apply histogram equalization
-        Mat equalized = new Mat(rows, cols, CvType.CV_8UC1);
+        Mat equalized = new Mat(rows, cols, CvType.CV_32FC1);
         Imgproc.equalizeHist(MatSnapShot, equalized);
+
+        // convert to float, very important
+        Mat floated = new Mat(rows, cols, CvType.CV_32FC1);
+        Core.normalize(equalized, floated, 0, 255, Core.NORM_MINMAX, CvType.CV_32FC1);
 
         // normalise image to have zero mean and 1 standard deviation
         Mat normalized = new Mat(rows, cols, CvType.CV_32FC1);
-        Core.normalize(equalized, normalized, 0, 1, Core.NORM_MINMAX, CvType.CV_32FC1);
-
-        Mat normalized_ = new Mat(rows, cols, CvType.CV_32FC1);
-        normalizeImage(equalized, normalized_);
-
-        Log.i(TAG, "Hi There");
-        Log.i(TAG, normalized.dump());
-        Log.i(TAG, normalized_.dump());
-
-
-        if (true)
-            return;
+        normalizeImage(floated, floated);
 
         // step 1: get ridge segment by padding then do block process
         int blockSize = 16;
         double threshold = 0.05;
-        Mat padded = imagePadding(normalized, blockSize);
-        Mat matRidgeSegment = new Mat(padded.rows(), padded.cols(), CvType.CV_32FC1);
-        Mat mask = new Mat(padded.rows(), padded.cols(), CvType.CV_8UC1);
-        ridgeSegment(padded, matRidgeSegment, mask, blockSize, threshold);
+        Mat padded = imagePadding(floated, blockSize);
+        int imgRows = padded.rows();
+        int imgCols = padded.cols();
+        Mat matRidgeSegment = new Mat(imgRows, imgCols, CvType.CV_32FC1);
+        Mat segmentMask = new Mat(imgRows, imgCols, CvType.CV_8UC1);
+        ridgeSegment(padded, matRidgeSegment, segmentMask, blockSize, threshold);
 
         // step 2: get ridge orientation
         int gradientSigma = 1;
         int blockSigma = 5;
         int orientSmoothSigma = 5;
-        Mat matRidgeOrientation = new Mat(padded.rows(), padded.cols(), CvType.CV_32FC1);
+        Mat matRidgeOrientation = new Mat(imgRows, imgCols, CvType.CV_32FC1);
         ridgeOrientation(matRidgeSegment, matRidgeOrientation, gradientSigma, blockSigma, orientSmoothSigma);
 
+        // step 3: get ridge frequency
+        int fBlockSize = 36;
+        int fWindowSize = 5;
+        int fMinWaveLength = 5;
+        int fMaxWaveLength = 15;
+        Mat matFrequency = new Mat(imgRows,imgCols, CvType.CV_32FC1);
+        ridgeFrequency(matRidgeSegment, segmentMask, matRidgeOrientation, matFrequency, fBlockSize, fWindowSize, fMinWaveLength, fMaxWaveLength);
 
-        //Mat result = new Mat(rows, cols, CvType.CV_32FC1);
-        //Core.normalize(matRidgeOrientation, result, 0, 255, Core.NORM_MINMAX, CvType.CV_32FC1);
-        //processImageViewSource.setImageBitmap(matToBitmap(matRidgeOrientation));
-
-        Log.i(TAG, "Hi There");
-        Log.i(TAG, matRidgeOrientation.dump());
+        // normalize-back the result to the default range of the image and show it
+        Mat result = new Mat(rows, cols, CvType.CV_8UC1);
+        Core.normalize(matRidgeOrientation, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+        processImageViewSource.setImageBitmap(matToBitmap(result));
     }
 
     /**
@@ -176,7 +177,6 @@ public class ProcessActivity extends Activity {
         Mat windowMask = new Mat(source.rows(), source.cols(), CvType.CV_8UC1);
 
         Rect roi;
-        double[] stdVals;
         double stdVal;
 
         for (int y = 1; y <= heightSteps; y++) {
@@ -184,13 +184,11 @@ public class ProcessActivity extends Activity {
 
                 roi = new Rect((blockSize) * (x - 1), (blockSize) * (y - 1), blockSize, blockSize);
                 windowMask.setTo(scalarBlack);
-                Core.rectangle(windowMask, new Point(roi.x, roi.y), new Point(roi.x + roi.width, roi.y + roi.height), scalarWhile);
+                Core.rectangle(windowMask, new Point(roi.x, roi.y), new Point(roi.x + roi.width, roi.y + roi.height), scalarWhile, -1, 8, 0);
 
                 window = source.submat(roi);
                 Core.meanStdDev(window, mean, std);
-                stdVals = std.toArray();
-                stdVal = stdVals[0];
-
+                stdVal = std.toArray()[0];
                 result.setTo(Scalar.all(stdVal), windowMask);
 
                 // mask used to calc mean and standard deviation later
@@ -199,11 +197,10 @@ public class ProcessActivity extends Activity {
         }
 
         // get mean and standard deviation
-        Core.meanStdDev(result, mean, std);
-        double m = mean.toArray()[0];
-        double s = std.toArray()[0];
-        Core.subtract(result, Scalar.all(m), result);
-        Core.divide(result, Scalar.all(s), result);
+        Core.meanStdDev(source, mean, std, mask);
+        Core.subtract(source, Scalar.all(mean.toArray()[0]), result);
+        Core.meanStdDev(result, mean, std, mask);
+        Core.divide(result, Scalar.all(std.toArray()[0]), result);
     }
 
     /**
@@ -219,7 +216,7 @@ public class ProcessActivity extends Activity {
         if (kSize % 2 == 0) {
             kSize++;
         }
-        Mat kernel = Imgproc.getGaussianKernel(kSize, gradientSigma, CvType.CV_32FC1);
+        Mat kernel = gaussianKernel(kSize, gradientSigma);
 
         Mat fXKernel = new Mat(1, 3, CvType.CV_32FC1);
         Mat fYKernel = new Mat(3, 1, CvType.CV_32FC1);
@@ -253,7 +250,7 @@ public class ProcessActivity extends Activity {
         if (kSize % 2 == 0) {
             kSize++;
         }
-        kernel = Imgproc.getGaussianKernel(kSize, blockSigma, CvType.CV_32FC1);
+        kernel = gaussianKernel(kSize, blockSigma);
         Imgproc.filter2D(gXX, gXX, CvType.CV_32FC1, kernel);
         Imgproc.filter2D(gYY, gYY, CvType.CV_32FC1, kernel);
         Imgproc.filter2D(gXY, gXY, CvType.CV_32FC1, kernel);
@@ -282,7 +279,7 @@ public class ProcessActivity extends Activity {
         if (kSize % 2 == 0) {
             kSize++;
         }
-        kernel = Imgproc.getGaussianKernel(kSize, orientSmoothSigma, CvType.CV_32FC1);
+        kernel = gaussianKernel(kSize, orientSmoothSigma);
         Imgproc.filter2D(sin2Theta, sin2Theta, CvType.CV_32FC1, kernel);
         Imgproc.filter2D(cos2Theta, cos2Theta, CvType.CV_32FC1, kernel);
 
@@ -290,9 +287,13 @@ public class ProcessActivity extends Activity {
         //orientim = pi/2 + atan2(sin2theta,cos2theta)/2;
         Atan2(sin2Theta, cos2Theta, result);
         Core.divide(result, Scalar.all(2), result);
-        Core.add(result, Scalar.all(Math.PI/(double)2.0), result);
+        Core.add(result, Scalar.all(Math.PI / (double) 2.0), result);
+    }
 
-        Log.i(TAG, "Hooooooooooray");
+    /**
+     * Calculate ridge frequency.
+     */
+    private void ridgeFrequency(Mat ridgeSegment, Mat segmentMask, Mat ridgeOrientation, Mat result, int blockSize, int windowSize, int minWaveLength, int maxWaveLength){
 
     }
 
@@ -335,18 +336,19 @@ public class ProcessActivity extends Activity {
 
     /**
      * Calculate bitwise atan2 for the given 2 images.
+     *
      * @param src1
      * @param src2
      * @param dstn
      */
-    private void Atan2(Mat src1, Mat src2, Mat dstn){
+    private void Atan2(Mat src1, Mat src2, Mat dstn) {
 
         int height = src1.height();
         int width = src2.width();
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                dstn.put(y, x, Core.fastAtan2((float) src1.get(y, x)[0], (float)src2.get(y, x)[0]));
+                dstn.put(y, x, Core.fastAtan2((float) src1.get(y, x)[0], (float) src2.get(y, x)[0]));
             }
         }
     }
@@ -354,17 +356,65 @@ public class ProcessActivity extends Activity {
     /**
      * Normalize the image to have zero mean and unit standard deviation.
      */
-    private void normalizeImage(Mat src, Mat dst){
+    private void normalizeImage(Mat src, Mat dst) {
 
-        MatOfDouble mean = new MatOfDouble(0);
-        MatOfDouble std = new MatOfDouble(0);
+        MatOfDouble mean = new MatOfDouble(0.0);
+        MatOfDouble std = new MatOfDouble(0.0);
 
         // get mean and standard deviation
         Core.meanStdDev(src, mean, std);
-        double m = mean.toArray()[0];
-        double s = std.toArray()[0];
-        Core.subtract(src, Scalar.all(m), dst);
-        Core.divide(dst, Scalar.all(s), dst);
+        Core.subtract(src, Scalar.all(mean.toArray()[0]), dst);
+        Core.meanStdDev(dst, mean, std);
+        Core.divide(dst, Scalar.all(std.toArray()[0]), dst);
+    }
+
+    /**
+     * Create Gaussian kernel.
+     *
+     * @param sigma
+     */
+    private Mat gaussianKernel(int kSize, int sigma) {
+
+        Mat kernelX = Imgproc.getGaussianKernel(kSize, sigma, CvType.CV_32FC1);
+        Mat kernelY = Imgproc.getGaussianKernel(kSize, sigma, CvType.CV_32FC1);
+
+        Mat kernel = new Mat(kSize, kSize, CvType.CV_32FC1);
+        Core.gemm(kernelX, kernelY.t(), 1, Mat.zeros(kSize, kSize, CvType.CV_32FC1), 0, kernel, 0);
+        return kernel;
+    }
+
+    /**
+     * Create Gaussian kernel.
+     *
+     * @param sigma
+     */
+    private Mat gaussianKernel_(int kSize, int sigma) {
+
+        Mat kernel = new Mat(kSize, kSize, CvType.CV_32FC1);
+
+        double total = 0;
+        int l = kSize / 2;
+        double distance = 0;
+        double value = 0;
+
+        for (int y = -l; y <= l; y++) {
+            for (int x = -l; x <= l; x++) {
+                distance = ((x * x) + (y * y)) / (2 * (sigma * sigma));
+                value = Math.exp(-distance);
+                kernel.put(y + l, x + l, value);
+                total += value;
+            }
+        }
+
+        for (int y = 0; y < kSize; y++) {
+            for (int x = 0; x < kSize; x++) {
+                value = kernel.get(y, x)[0];
+                value /= total;
+                kernel.put(y, x, value);
+            }
+        }
+
+        return kernel;
     }
 
     /**
