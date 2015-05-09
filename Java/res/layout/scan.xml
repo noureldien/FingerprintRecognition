@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:id="@+id/scanMainLayout">
+    <FrameLayout
+            android:id="@+id/scanCameraFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    <ImageView
+            android:id="@+id/scanImageViewSnapshot"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            android:background="@android:color/white"
+            android:scaleType="centerCrop" />
+    <ProgressBar
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/scanProgressBar"
+            android:indeterminate="true"
+            android:indeterminateBehavior="repeat"
+            android:indeterminateOnly="true"
+            android:visibility="invisible" />
+    <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true">
+        <View
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:id="@+id/scanViewLine" />
+    </LinearLayout>
+</RelativeLayout>
