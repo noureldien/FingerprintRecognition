@@ -22,9 +22,9 @@
 %
 % Returns:     normim - Image where the ridge regions are renormalised to
 %                       have zero mean, unit standard deviation.
-%              mask   - Mask indicating ridge-like regions of the image, 
+%              mask   - Mask indicating ridge-like regions of the image,
 %                       0 for non ridge regions, 1 for ridge regions.
-%              maskind - Vector of indices of locations within the mask. 
+%              maskind - Vector of indices of locations within the mask.
 %
 % Suggested values for a 500dpi fingerprint image:
 %
@@ -32,7 +32,7 @@
 %
 % See also: RIDGEORIENT, RIDGEFREQ, RIDGEFILTER
 
-% Peter Kovesi         
+% Peter Kovesi
 % School of Computer Science & Software Engineering
 % The University of Western Australia
 % pk at csse uwa edu au
@@ -42,17 +42,18 @@
 
 
 function [normim, mask, maskind] = ridgesegment(im, blksze, thresh)
-    
-    im = normalise(im,0,1);  % normalise to have zero mean, unit std dev
-    
-    fun = inline('std(x(:))*ones(size(x))');
-    
-    stddevim = blkproc(im, [blksze blksze], fun);
-    
-    mask = stddevim > thresh;
-    maskind = find(mask);
-    
-    % Renormalise image so that the *ridge regions* have zero mean, unit
-    % standard deviation.
-    im = im - mean(im(maskind));
-    normim = im/std(im(maskind));    
+
+im_ = im;
+im = normalise(im,0,1);  % normalise to have zero mean, unit std dev
+
+fun = inline('std(x(:))*ones(size(x))');
+
+stddevim = blkproc(im, [blksze blksze], fun);
+
+mask = stddevim > thresh;
+maskind = find(mask);
+
+% Renormalise image so that the *ridge regions* have zero mean, unit
+% standard deviation.
+im = im - mean(im(maskind));
+normim = im/std(im(maskind));

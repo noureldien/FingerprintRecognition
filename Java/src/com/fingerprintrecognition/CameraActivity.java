@@ -3,6 +3,7 @@ package com.fingerprintrecognition;
 import android.app.ActionBar;
 import android.content.Intent;
 import android.util.Log;
+import android.view.MenuItem;
 import android.widget.ImageView;
 import com.fingerprintrecognition.app.*;
 
@@ -79,8 +80,22 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     public void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
-
         initialize();
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item){
+
+        switch (item.getItemId()){
+            case android.R.id.home:
+                // exist the application by finishing the Camera activity
+                this.finish();
+                break;
+            default:
+                break;
+        }
+
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
