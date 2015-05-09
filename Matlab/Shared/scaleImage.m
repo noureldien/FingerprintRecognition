@@ -5,6 +5,11 @@ result = min(min(m));
 range1 = max(max(m)) - result;
 m = (m - result) / range1;
 
+if (nargin == 1)
+    y = 255;
+    x = 0;
+end
+
 % Then scale to [x,y]:
 range2 = y - x;
 result = (m*range2) + x;

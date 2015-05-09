@@ -29,7 +29,7 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
 
     // region Private Static Variables
 
-    private static final String TAG = "FingerprintRecognition::TestActivity";
+    private static final String TAG = "FingerprintRecognition::CameraActivity";
 
     // endregion Private Variables
 
