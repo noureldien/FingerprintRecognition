@@ -10,30 +10,38 @@ import android.os.Handler;
  */
 public class SplashActivity extends Activity {
 
+    // region Public Methods
+
     /**
      * Called when the activity is first created.
      */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        navigateToMainPage();
+        navigateToCameraActivity();
     }
 
+    // endregion Public Methods
+
+    // region Private Methods
+
     /**
-     * Navigate to the 'Main' activity.
+     * Navigate to the Camera activity.
      */
-    private void navigateToMainPage() {
+    private void navigateToCameraActivity() {
         /* New Handler to start the Menu-Activity
          * and close this Splash-Screen after some seconds.*/
         new Handler().postDelayed(new Runnable(){
             @Override
             public void run() {
-                // navigate to 'Main' page
-                Intent mainIntent = new Intent(SplashActivity.this, TestActivity.class);
-                SplashActivity.this.startActivity(mainIntent);
+                // navigate to Camera page
+                Intent intent = new Intent(SplashActivity.this, TestActivity.class);
+                SplashActivity.this.startActivity(intent);
                 SplashActivity.this.finish();
             }
         }, 1000);
 
     }
+
+    // endregion Private Methods
 }
