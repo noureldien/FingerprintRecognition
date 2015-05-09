@@ -29,13 +29,13 @@ public class SplashActivity extends Activity {
      * Navigate to the Camera activity.
      */
     private void navigateToCameraActivity() {
-        /* New Handler to start the Menu-Activity
+        /* New Handler to start the Camera Activity
          * and close this Splash-Screen after some seconds.*/
         new Handler().postDelayed(new Runnable(){
             @Override
             public void run() {
-                // navigate to Camera page
-                Intent intent = new Intent(SplashActivity.this, TestActivity.class);
+                // navigate to Camera activity
+                Intent intent = new Intent(SplashActivity.this, com.fingerprintrecognition.CameraActivity.class);
                 SplashActivity.this.startActivity(intent);
                 SplashActivity.this.finish();
             }

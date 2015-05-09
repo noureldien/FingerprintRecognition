@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.fingerprintrecognition" android:versionCode="1" android:versionName="1.0" android:installLocation="auto">
     <application android:hardwareAccelerated="true" android:label="@string/app_name" android:theme="@style/AppTheme" android:logo="@drawable/ic_icon" android:icon="@drawable/ic_launcher">
-        <activity android:name="SplashActivity" android:theme="@style/AppSplashTheme" android:screenOrientation="portrait" android:noHistory="false">
+        <activity android:name=".SplashActivity" android:screenOrientation="portrait" android:theme="@style/AppSplashTheme" android:noHistory="false">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity android:name="TestActivity" android:screenOrientation="landscape" android:label="Camera" android:configChanges="keyboardHidden|orientation" android:theme="@style/AppThemeTransparent">
+        <activity android:name=".CameraActivity" android:screenOrientation="landscape" android:label="Camera" android:theme="@style/AppThemeTransparent" android:configChanges="keyboardHidden|orientation">
+        </activity>
+        <activity android:name=".ProcessActivity" android:screenOrientation="landscape" android:label="Process" android:theme="@style/AppThemeTransparent">
         </activity>
     </application>
     <uses-sdk android:minSdkVersion="15" android:targetSdkVersion="15"/>

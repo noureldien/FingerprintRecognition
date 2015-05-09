@@ -1,5 +1,6 @@
 package com.fingerprintrecognition;
 
+import android.app.ActionBar;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -52,12 +53,17 @@ public class ProcessActivity extends Activity {
 
         setContentView(R.layout.process);
 
-        // convert to bitmap
-        //Bitmap bm = Bitmap.createBitmap(MatSnapShot.cols(), MatSnapShot.rows(), Bitmap.Config.ARGB_8888);
-        //Utils.matToBitmap(MatSnapShot, bm);
+        // set Home button of the ActionBar as back
+        ActionBar actionBar = this.getActionBar();
+        actionBar.setHomeButtonEnabled(true);
+        actionBar.setDisplayHomeAsUpEnabled(true);
 
-        //ImageView processImageViewSource = (ImageView)this.findViewById(R.id.processImageViewSource);
-        //processImageViewSource.setImageBitmap(bm);
+        // convert to bitmap
+        Bitmap bm = Bitmap.createBitmap(MatSnapShot.cols(), MatSnapShot.rows(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(MatSnapShot, bm);
+
+        ImageView processImageViewSource = (ImageView)this.findViewById(R.id.processImageViewSource);
+        processImageViewSource.setImageBitmap(bm);
     }
 
     // endregion Private Methods
