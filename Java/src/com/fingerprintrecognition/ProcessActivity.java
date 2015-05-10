@@ -29,6 +29,8 @@ public class ProcessActivity extends Activity {
 
     public static Mat MatSnapShot;
 
+    public static Mat MatSnapShotMask;
+
     // endregion Public Static Members
 
     // region Private Static Variables
@@ -169,7 +171,10 @@ public class ProcessActivity extends Activity {
         double filterKy = 0.5;
         ridgeFilter(matRidgeSegment, matRidgeOrientation, matFrequency, matRidgeFilter, filterKx, filterKy, medianFreq);
 
-        showImage(matRidgeFilter);
+        // step 5: enhance image after ridge filter
+        Mat matEnhanced = new Mat(imgRows, imgCols, CvType.CV_32FC1);
+        enhancement(matRidgeFilter, matEnhanced, blockSize);
+        showImage(matEnhanced);
     }
 
     /**
@@ -504,6 +509,8 @@ public class ProcessActivity extends Activity {
         Core.multiply(refFilterPart1, refFilterPart2, refFilter);
 
         // Generate rotated versions of the filter.  Note orientation
+        // image provides orientation *along* the ridges, hence +90
+        // degrees, and the function requires angles +ve anticlockwise, hence the minus sign.
         Mat rotated;
         Mat rotateMatrix;
         double rotateAngle;
@@ -557,6 +564,26 @@ public class ProcessActivity extends Activity {
                 }
             }
         }
+    }
+
+    /**
+     * Enhance the image after ridge filter.
+     * @param source
+     * @param result
+     * @param blockSize
+     */
+    private void enhancement(Mat source, Mat result, int blockSize){
+
+        // apply mask, binary threshold, thinning, ..., etc
+
+        Mat paddedMask = imagePadding(MatSnapShotMask, blockSize);
+
+        // apply the original mask to get rid of extras
+        Core.multiply(source, paddedMask, result, 1.0 , CvType.CV_32FC1);
+
+        // apply binary threshold
+        Core.MinMaxLocResult minMaxResult = Core.minMaxLoc(source);
+        Imgproc.threshold(result, result, 0, minMaxResult.maxVal, Imgproc.THRESH_BINARY);
     }
 
     /**

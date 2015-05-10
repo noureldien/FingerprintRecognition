@@ -201,10 +201,12 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     private void processOnTouch() {
 
         // take snapshot
-        Mat matSnapShot = takeSnapShort();
+        Mat snapShot = takeSnapShort();
+        Mat mask = snapShotMask(snapShot.rows(), snapShot.cols());
 
         // pass it to the process activity then navigate to it
-        ProcessActivity.MatSnapShot = matSnapShot;
+        ProcessActivity.MatSnapShot = snapShot;
+        ProcessActivity.MatSnapShotMask = mask;
         navigateToProcessActivity();
     }
 
@@ -261,6 +263,25 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
         //return matScaled;
 
         return matGrayScale;
+    }
+
+    /**
+     * Mask used in the snapshot.
+     * @return
+     */
+    private Mat snapShotMask(int rows, int cols){
+
+        Point center = new Point(cols / 2, rows / 2);
+        Size axes = new Size(180, 120);
+        Scalar scalarWhite = new Scalar(255, 255, 255);
+        Scalar scalarGray = new Scalar(100, 100, 100);
+        Scalar scalarBlack = new Scalar(0, 0, 0);
+        int thickness = -1;
+        int lineType = 8;
+
+        Mat mask = new Mat(rows, cols, CvType.CV_8UC1, scalarBlack);
+        Core.ellipse(mask, center, axes, 0, 0, 360, scalarWhite, thickness, lineType, 0);
+        return  mask;
     }
 
     /**

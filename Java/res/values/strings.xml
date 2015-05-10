@@ -83,7 +83,7 @@
     </style>
 
     <style name="ActionBarTransparentAppTheme" parent="@android:style/Widget.Holo.Light.ActionBar">
-        <item name="android:background">@color/apptheme_actionbar_background_transparent</item>
+        <item name="android:background">#77008970</item>
     </style>
 
     <style name="ActionBarTabAppTheme" parent="@android:style/Widget.Holo.Light.ActionBar.TabView">

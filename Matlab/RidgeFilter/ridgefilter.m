@@ -64,19 +64,12 @@ reffilter1 = exp(-reffilter1/2);
 reffilter2 = cos(2*pi*medianFreq*x);
 reffilter = reffilter1.*reffilter2;
 
-show(reffilter1);
-show(reffilter2);
-show(reffilter);
-
 % Generate rotated versions of the filter.  Note orientation
 % image provides orientation *along* the ridges, hence +90
 % degrees, and imrotate requires angles +ve anticlockwise, hence
 % the minus sign.
 for i = 1:filterCount
     filter{i} = imrotate(reffilter,-(i*angleInc+90),'bilinear','crop');
-if (i==6)
-show(filter{i});
-end
 end
 
 % Convert orientation matrix values from radians to an index value
