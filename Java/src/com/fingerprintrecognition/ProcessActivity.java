@@ -497,15 +497,13 @@ public class ProcessActivity extends Activity {
         Core.exp(refFilterPart1, refFilterPart1);
 
         Mat refFilterPart2 = new Mat(length, length, CvType.CV_32FC1);
-        Core.multiply(x, Scalar.all(360 * medianFreq), refFilterPart2);
+        Core.multiply(x, Scalar.all(2 * Math.PI * medianFreq), refFilterPart2);
         refFilterPart2 = matCos(refFilterPart2);
 
         Mat refFilter = new Mat(length, length, CvType.CV_32FC1);
-        Core.add(refFilterPart1, refFilterPart2, refFilter);
+        Core.multiply(refFilterPart1, refFilterPart2, refFilter);
 
         // Generate rotated versions of the filter.  Note orientation
-        // image provides orientation *along* the ridges, hence +90
-        // degrees, and the function requires angles +ve anticlockwise, hence the minus sign.
         Mat rotated;
         Mat rotateMatrix;
         double rotateAngle;
@@ -513,7 +511,7 @@ public class ProcessActivity extends Activity {
         Size rotatedSize = new Size(length, length);
         double rotateScale = 1.0;
         for (int i = 0; i < filterCount; i++) {
-            rotateAngle = -((i * angleInc) + 90);
+            rotateAngle = -(i * angleInc);
             rotated = new Mat(length, length, CvType.CV_32FC1);
             rotateMatrix = Imgproc.getRotationMatrix2D(center, rotateAngle, rotateScale);
             Imgproc.warpAffine(refFilter, rotated, rotateMatrix, rotatedSize, Imgproc.INTER_LINEAR);
@@ -655,8 +653,9 @@ public class ProcessActivity extends Activity {
      */
     private Mat matCos(Mat source) {
 
-        int cols = source.cols();
         int rows = source.rows();
+        int cols = source.cols();
+
         Mat result = new Mat(cols, rows, CvType.CV_32FC1);
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {

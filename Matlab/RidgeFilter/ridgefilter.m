@@ -59,8 +59,14 @@ sigmay = ky/medianFreq;
 
 sze = round(3*max(sigmax,sigmay));
 [x,y] = meshgrid(-sze:sze);
-reffilter = ((x.^2) / (sigmax^2)) + ((y.^2) / (sigmay^2));
-reffilter = exp(-reffilter/2).*cos(2*pi*medianFreq*x);
+reffilter1 = ((x.^2) / (sigmax^2)) + ((y.^2) / (sigmay^2));
+reffilter1 = exp(-reffilter1/2); 
+reffilter2 = cos(2*pi*medianFreq*x);
+reffilter = reffilter1.*reffilter2;
+
+show(reffilter1);
+show(reffilter2);
+show(reffilter);
 
 % Generate rotated versions of the filter.  Note orientation
 % image provides orientation *along* the ridges, hence +90
@@ -68,6 +74,9 @@ reffilter = exp(-reffilter/2).*cos(2*pi*medianFreq*x);
 % the minus sign.
 for i = 1:filterCount
     filter{i} = imrotate(reffilter,-(i*angleInc+90),'bilinear','crop');
+if (i==6)
+show(filter{i});
+end
 end
 
 % Convert orientation matrix values from radians to an index value
