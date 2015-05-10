@@ -50,7 +50,7 @@
 %
 % January 2005
 
-function freq = ridgefreq(im, mask, orient, blksze, windsze, ...
+function [freq, medianfreq] = ridgefreq(im, mask, orient, blksze, windsze, ...
     minWaveLength, maxWaveLength)
 
 [rows, cols] = size(im);

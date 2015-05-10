@@ -104,22 +104,35 @@ public class ProcessActivity extends Activity {
     }
 
     /**
+     * Normalize-back the result to the default range of the image and show it.
+     *
+     * @param image
+     */
+    private void showImage(Mat image) {
+
+        int rows = image.rows();
+        int cols = image.cols();
+
+        Mat result = new Mat(rows, cols, CvType.CV_8UC1);
+        Core.normalize(image, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+        processImageViewSource.setImageBitmap(matToBitmap(result));
+    }
+
+    /**
      * Process the image to get the skeleton.
      */
     private void processImage() {
 
         int rows = MatSnapShot.rows();
         int cols = MatSnapShot.cols();
-        int width = MatSnapShot.width();
-        int height = MatSnapShot.height();
 
         // apply histogram equalization
-        Mat equalized = new Mat(rows, cols, CvType.CV_32FC1);
-        Imgproc.equalizeHist(MatSnapShot, equalized);
+        //Mat equalized = new Mat(rows, cols, CvType.CV_32FC1);
+        //Imgproc.equalizeHist(MatSnapShot, equalized);
 
         // convert to float, very important
         Mat floated = new Mat(rows, cols, CvType.CV_32FC1);
-        equalized.convertTo(floated, CvType.CV_32FC1);
+        MatSnapShot.convertTo(floated, CvType.CV_32FC1);
 
         // normalise image to have zero mean and 1 standard deviation
         Mat normalized = new Mat(rows, cols, CvType.CV_32FC1);
@@ -128,7 +141,7 @@ public class ProcessActivity extends Activity {
         // step 1: get ridge segment by padding then do block process
         int blockSize = 16;
         double threshold = 0.05;
-        Mat padded = imagePadding(normalized, blockSize);
+        Mat padded = imagePadding(floated, blockSize);
         int imgRows = padded.rows();
         int imgCols = padded.cols();
         Mat matRidgeSegment = new Mat(imgRows, imgCols, CvType.CV_32FC1);
@@ -156,10 +169,7 @@ public class ProcessActivity extends Activity {
         double filterKy = 0.5;
         ridgeFilter(matRidgeSegment, matRidgeOrientation, matFrequency, matRidgeFilter, filterKx, filterKy, medianFreq);
 
-        // normalize-back the result to the default range of the image and show it
-        Mat result = new Mat(rows, cols, CvType.CV_8UC1);
-        Core.normalize(matFrequency, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
-        processImageViewSource.setImageBitmap(matToBitmap(result));
+        showImage(matRidgeFilter);
     }
 
     /**
@@ -213,11 +223,17 @@ public class ProcessActivity extends Activity {
 
     /**
      * Calculate ridge orientation.
+     *
+     * @param ridgeSegment
+     * @param result
+     * @param gradientSigma
+     * @param blockSigma
+     * @param orientSmoothSigma
      */
-    private void ridgeOrientation(Mat source, Mat result, int gradientSigma, int blockSigma, int orientSmoothSigma) {
+    private void ridgeOrientation(Mat ridgeSegment, Mat result, int gradientSigma, int blockSigma, int orientSmoothSigma) {
 
-        int rows = source.rows();
-        int cols = source.cols();
+        int rows = ridgeSegment.rows();
+        int cols = ridgeSegment.cols();
 
         // calculate image gradients
         int kSize = Math.round(6 * gradientSigma);
@@ -242,8 +258,8 @@ public class ProcessActivity extends Activity {
 
         Mat gX = new Mat(rows, cols, CvType.CV_32FC1);
         Mat gY = new Mat(rows, cols, CvType.CV_32FC1);
-        Imgproc.filter2D(source, gX, CvType.CV_32FC1, fX);
-        Imgproc.filter2D(source, gY, CvType.CV_32FC1, fY);
+        Imgproc.filter2D(ridgeSegment, gX, CvType.CV_32FC1, fX);
+        Imgproc.filter2D(ridgeSegment, gY, CvType.CV_32FC1, fY);
 
         // covariance data for the image gradients
         Mat gXX = new Mat(rows, cols, CvType.CV_32FC1);
@@ -291,15 +307,15 @@ public class ProcessActivity extends Activity {
         Imgproc.filter2D(sin2Theta, sin2Theta, CvType.CV_32FC1, kernel);
         Imgproc.filter2D(cos2Theta, cos2Theta, CvType.CV_32FC1, kernel);
 
-        // calculate the result as the following
-        //orientim = pi/2 + atan2(sin2theta,cos2theta)/2;
+        // calculate the result as the following, so the values of the matrix range [0, PI]
+        //orientim = atan2(sin2theta,cos2theta)/360;
         atan2(sin2Theta, cos2Theta, result);
-        Core.divide(result, Scalar.all(2), result);
-        Core.add(result, Scalar.all(Math.PI / (double) 2.0), result);
+        Core.multiply(result, Scalar.all(Math.PI / 360.0), result);
     }
 
     /**
      * Calculate ridge frequency.
+     *
      * @param ridgeSegment
      * @param segmentMask
      * @param ridgeOrientation
@@ -344,17 +360,18 @@ public class ProcessActivity extends Activity {
      * Estimate fingerprint ridge frequency within image block.
      *
      * @param block
-     * @param orientation
+     * @param blockOrientation
      * @param windowSize
      * @param minWaveLength
      * @param maxWaveLength
      * @return
      */
-    private Mat calculateFrequency(Mat block, Mat orientation, int windowSize, int minWaveLength, int maxWaveLength) {
+    private Mat calculateFrequency(Mat block, Mat blockOrientation, int windowSize, int minWaveLength, int maxWaveLength) {
 
         int rows = block.rows();
         int cols = block.cols();
 
+        Mat orientation = blockOrientation.clone();
         Core.multiply(orientation, Scalar.all(2.0), orientation);
 
         int orientLength = (int) (orientation.total());
@@ -454,17 +471,115 @@ public class ProcessActivity extends Activity {
         int rows = ridgeSegment.rows();
         int cols = ridgeSegment.cols();
 
-        // find where there is valid frequency data
-        Mat threshold = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
-        Mat compareMask = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
-        Core.compare(frequency, threshold, compareMask, Core.CMP_GE);
+        int filterCount = 180 / 3;
+        Mat[] filters = new Mat[filterCount];
 
-        // round the array of frequencies to the nearest 0.01 to reduce the
-        // number of distinct frequencies we have to deal with.
-        Mat roundedFrequency = roundMat(frequency, 100);
+        double sigmaX = kx / medianFreq;
+        double sigmaY = ky / medianFreq;
 
-        // get the distinct frequencies
-        uniqueFreq = uniqueValues(roundedFrequency, compareMask);
+        //mat refFilter = exp(-(x. ^ 2 / sigmaX ^ 2 + y. ^ 2 / sigmaY ^ 2) / 2). * cos(2 * pi * medianFreq * x);
+        int size = (int) Math.round(3 * Math.max(sigmaX, sigmaY));
+        size = (size % 2 == 0) ? size : size + 1;
+        int length = (size * 2) + 1;
+        Mat x = meshGrid(size);
+        Mat y = x.t();
+
+        Mat xSquared = new Mat(length, length, CvType.CV_32FC1);
+        Mat ySquared = new Mat(length, length, CvType.CV_32FC1);
+        Core.multiply(x, x, xSquared);
+        Core.multiply(y, y, ySquared);
+        Core.divide(xSquared, Scalar.all(sigmaX * sigmaX), xSquared);
+        Core.divide(ySquared, Scalar.all(sigmaY * sigmaY), ySquared);
+
+        Mat refFilterPart1 = new Mat(length, length, CvType.CV_32FC1);
+        Core.add(xSquared, ySquared, refFilterPart1);
+        Core.divide(refFilterPart1, Scalar.all(-2.0), refFilterPart1);
+        Core.exp(refFilterPart1, refFilterPart1);
+
+        Mat refFilterPart2 = new Mat(length, length, CvType.CV_32FC1);
+        Core.multiply(x, Scalar.all(360 * medianFreq), refFilterPart2);
+        refFilterPart2 = matCos(refFilterPart2);
+
+        Mat refFilter = new Mat(length, length, CvType.CV_32FC1);
+        Core.add(refFilterPart1, refFilterPart2, refFilter);
+
+        // Generate rotated versions of the filter.  Note orientation
+        // image provides orientation *along* the ridges, hence +90
+        // degrees, and the function requires angles +ve anticlockwise, hence the minus sign.
+        Mat rotated;
+        Mat rotateMatrix;
+        double rotateAngle;
+        Point center = new Point(length / 2, length / 2);
+        Size rotatedSize = new Size(length, length);
+        double rotateScale = 1.0;
+        for (int i = 0; i < filterCount; i++) {
+            rotateAngle = -((i * angleInc) + 90);
+            rotated = new Mat(length, length, CvType.CV_32FC1);
+            rotateMatrix = Imgproc.getRotationMatrix2D(center, rotateAngle, rotateScale);
+            Imgproc.warpAffine(refFilter, rotated, rotateMatrix, rotatedSize, Imgproc.INTER_LINEAR);
+            filters[i] = rotated;
+        }
+
+        // convert orientation matrix values from radians to an index value
+        // that corresponds to round(degrees/angleInc)
+        Mat orientIndexes = new Mat(orientation.rows(), orientation.cols(), CvType.CV_8UC1);
+        Core.multiply(orientation, Scalar.all((double) filterCount / Math.PI), orientIndexes, 1.0, CvType.CV_8UC1);
+
+        Mat orientMask;
+        Mat orientThreshold;
+
+        orientMask = new Mat(orientation.rows(), orientation.cols(), CvType.CV_8UC1, Scalar.all(0));
+        orientThreshold = new Mat(orientation.rows(), orientation.cols(), CvType.CV_8UC1, Scalar.all(0.0));
+        Core.compare(orientIndexes, orientThreshold, orientMask, Core.CMP_LT);
+        Core.add(orientIndexes, Scalar.all(filterCount), orientIndexes, orientMask);
+
+        orientMask = new Mat(orientation.rows(), orientation.cols(), CvType.CV_8UC1, Scalar.all(0));
+        orientThreshold = new Mat(orientation.rows(), orientation.cols(), CvType.CV_8UC1, Scalar.all(filterCount));
+        Core.compare(orientIndexes, orientThreshold, orientMask, Core.CMP_GE);
+        Core.subtract(orientIndexes, Scalar.all(filterCount), orientIndexes, orientMask);
+
+        // finally, find where there is valid frequency data then do the filtering
+        Mat value = new Mat(length, length, CvType.CV_32FC1);
+        Mat subSegment;
+        int orientIndex;
+        double sum;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                if (frequency.get(r, c)[0] > 0
+                        && r > (size + 1)
+                        && r < (rows - size - 1)
+                        && c > (size + 1)
+                        && c < (cols - size - 1)) {
+                    orientIndex = (int) orientIndexes.get(r, c)[0];
+                    // Log.i(TAG, String.format("Row %d, Column %d, rows %d, cols %d"", r, c, rows, cols));
+                    subSegment = ridgeSegment.submat(r - size - 1, r + size, c - size - 1, c + size);
+                    Core.multiply(subSegment, filters[orientIndex], value);
+                    sum = Core.sumElems(value).val[0];
+                    result.put(r, c, sum);
+                }
+            }
+        }
+    }
+
+    /**
+     * Create mesh grid.
+     *
+     * @param size
+     * @return
+     */
+    private Mat meshGrid(int size) {
+
+        int l = (size * 2) + 1;
+        int value = -size;
+
+        Mat result = new Mat(l, l, CvType.CV_32FC1);
+        for (int c = 0; c < l; c++) {
+            for (int r = 0; r < l; r++) {
+                result.put(r, c, value);
+            }
+            value++;
+        }
+        return result;
     }
 
     /**
@@ -500,7 +615,7 @@ public class ProcessActivity extends Activity {
     private float[] uniqueValues(Mat source, Mat mask) {
 
         Mat result = new Mat(source.cols(), source.rows(), CvType.CV_32FC1);
-        Core.multiply(source, mask, result, 1.0 , CvType.CV_32FC1);
+        Core.multiply(source, mask, result, 1.0, CvType.CV_32FC1);
 
         logMat(source);
         logMat(result);
@@ -510,6 +625,46 @@ public class ProcessActivity extends Activity {
         result.get(0, 0, values);
 
         return values;
+    }
+
+    /**
+     * Apply sin to each element of the matrix.
+     *
+     * @param source
+     * @return
+     */
+    private Mat matSin(Mat source) {
+
+        int cols = source.cols();
+        int rows = source.rows();
+        Mat result = new Mat(cols, rows, CvType.CV_32FC1);
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                result.put(r, c, Math.sin(source.get(r, c)[0]));
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Apply cos to each element of the matrix.
+     *
+     * @param source
+     * @return
+     */
+    private Mat matCos(Mat source) {
+
+        int cols = source.cols();
+        int rows = source.rows();
+        Mat result = new Mat(cols, rows, CvType.CV_32FC1);
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                result.put(r, c, Math.cos(source.get(r, c)[0]));
+            }
+        }
+
+        return result;
     }
 
     /**

@@ -30,11 +30,11 @@ orientim = ridgeorient(normim, gradientsigma, blocksigma, orientsmoothsigma);
 plotridgeorient(orientim, 20, im, 2);
 
 % determine ridge frequency values across the image
-blksze = 36;
-freq = ridgefreq(normim, mask, orientim, blksze, 5, 1, 25);
+%blksze = 36;
+[freq, medianFreq] = ridgefreq(normim, mask, orientim, blksze, 5, 1, 25);
 
 % apply filters to enhance the ridge pattern
-newim = ridgefilter(normim, orientim, freq, 0.5, 0.5);
+newim = ridgefilter(normim, orientim, freq, medianFreq, 0.5, 0.5);
 
 % binarise, ridge/valley threshold is 0
 binim = newim > 0;
