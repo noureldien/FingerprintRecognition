@@ -98,7 +98,6 @@ cos2theta = filter2(f, cos2theta);
 sin2theta = filter2(f, sin2theta);
 
 orientim = pi/2 + atan2(sin2theta,cos2theta)/2;
-show(orientim);
 
 end
 

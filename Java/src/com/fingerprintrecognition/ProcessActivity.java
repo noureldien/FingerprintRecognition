@@ -12,10 +12,12 @@ import android.widget.ImageView;
 import org.opencv.android.Utils;
 import org.opencv.core.*;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.ml.CvStatModel;
 
 import java.security.SecureClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -145,12 +147,12 @@ public class ProcessActivity extends Activity {
         int fWindowSize = 5;
         int fMinWaveLength = 5;
         int fMaxWaveLength = 15;
-        Mat matFrequency = new Mat(imgRows,imgCols, CvType.CV_32FC1);
+        Mat matFrequency = new Mat(imgRows, imgCols, CvType.CV_32FC1);
         ridgeFrequency(matRidgeSegment, segmentMask, matRidgeOrientation, matFrequency, fBlockSize, fWindowSize, fMinWaveLength, fMaxWaveLength);
 
         // normalize-back the result to the default range of the image and show it
         Mat result = new Mat(rows, cols, CvType.CV_8UC1);
-        Core.normalize(matRidgeOrientation, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+        Core.normalize(matFrequency, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
         processImageViewSource.setImageBitmap(matToBitmap(result));
     }
 
@@ -285,7 +287,7 @@ public class ProcessActivity extends Activity {
 
         // calculate the result as the following
         //orientim = pi/2 + atan2(sin2theta,cos2theta)/2;
-        Atan2(sin2Theta, cos2Theta, result);
+        atan2(sin2Theta, cos2Theta, result);
         Core.divide(result, Scalar.all(2), result);
         Core.add(result, Scalar.all(Math.PI / (double) 2.0), result);
     }
@@ -293,8 +295,157 @@ public class ProcessActivity extends Activity {
     /**
      * Calculate ridge frequency.
      */
-    private void ridgeFrequency(Mat ridgeSegment, Mat segmentMask, Mat ridgeOrientation, Mat result, int blockSize, int windowSize, int minWaveLength, int maxWaveLength){
+    private void ridgeFrequency(Mat ridgeSegment, Mat segmentMask, Mat ridgeOrientation, Mat frequencies, int blockSize, int windowSize, int minWaveLength, int maxWaveLength) {
 
+        int rows = ridgeSegment.rows();
+        int cols = ridgeSegment.cols();
+
+        Mat blockSegment;
+        Mat blockOrientation;
+        Mat frequency;
+
+        for (int y = 0; y < rows - blockSize; y += blockSize) {
+            for (int x = 0; x < cols - blockSize; x += blockSize) {
+                blockSegment = ridgeSegment.submat(y, y + blockSize, x, x + blockSize);
+                blockOrientation = ridgeOrientation.submat(y, y + blockSize, x, x + blockSize);
+                frequency = calculateFrequency(blockSegment, blockOrientation, windowSize, minWaveLength, maxWaveLength);
+                frequency.copyTo(frequencies.rowRange(y, y + blockSize - 1).colRange(x, x + blockSize - 1));
+            }
+        }
+
+        // mask out frequencies calculated for non ridge regions
+        Core.multiply(frequencies, segmentMask, frequencies, 1.0, CvType.CV_32FC1);
+
+        // find median frequency over all the valid regions of the image.
+        double medianFrequency = medianFrequency(frequencies);
+
+        // the median frequency value used across the whole fingerprint gives a more satisfactory result
+        Core.multiply(segmentMask, Scalar.all(medianFrequency), frequencies, 1.0, CvType.CV_32FC1);
+    }
+
+    /**
+     * Estimate fingerprint ridge frequency within image block.
+     *
+     * @param block
+     * @param orientation
+     * @param windowSize
+     * @param minWaveLength
+     * @param maxWaveLength
+     * @return
+     */
+    private Mat calculateFrequency(Mat block, Mat orientation, int windowSize, int minWaveLength, int maxWaveLength) {
+
+        int rows = block.rows();
+        int cols = block.cols();
+
+        Core.multiply(orientation, Scalar.all(2.0), orientation);
+
+        int orientLength = (int) (orientation.total());
+        float[] orientations = new float[orientLength];
+        orientation.get(0, 0, orientations);
+
+        double[] sinOrient = new double[orientLength];
+        double[] cosOrient = new double[orientLength];
+        for (int i = 1; i < orientLength; i++) {
+            sinOrient[i] = Math.sin((double) orientations[i]);
+            cosOrient[i] = Math.cos((double) orientations[i]);
+        }
+        float orient = Core.fastAtan2((float) calculateMean(sinOrient), (float) calculateMean(cosOrient)) / (float) 2.0;
+
+        // rotate the image block so that the ridges are vertical
+        Mat rotated = new Mat(rows, cols, CvType.CV_32FC1);
+        Point center = new Point(cols / 2, rows / 2);
+        double rotateAngle = ((orient / Math.PI) * (180.0)) + 90.0;
+        double rotateScale = 1.0;
+        Size rotatedSize = new Size(cols, rows);
+        Mat rotateMatrix = Imgproc.getRotationMatrix2D(center, rotateAngle, rotateScale);
+        Imgproc.warpAffine(block, rotated, rotateMatrix, rotatedSize, Imgproc.INTER_NEAREST);
+
+        // crop the image so that the rotated image does not contain any invalid regions
+        // this prevents the projection down the columns from being mucked up
+        int cropSize = (int) Math.round(rows / Math.sqrt(2));
+        int offset = (int) Math.round((rows - cropSize) / 2.0) - 1;
+        Mat cropped = rotated.submat(offset, offset + cropSize, offset, offset + cropSize);
+
+        // get sums of columns
+        float sum = 0;
+        Mat proj = new Mat(1, cropped.cols(), CvType.CV_32FC1);
+        for (int c = 1; c < cropped.cols(); c++) {
+            sum = 0;
+            for (int r = 1; r < cropped.cols(); r++) {
+                sum += cropped.get(r, c)[0];
+            }
+            proj.put(0, c, sum);
+        }
+
+        // find peaks in projected grey values by performing a grayScale
+        // dilation and then finding where the dilation equals the original values.
+        Mat dilateKernel = new Mat(windowSize, windowSize, CvType.CV_32FC1, Scalar.all(1.0));
+        Mat dilate = new Mat(1, cropped.cols(), CvType.CV_32FC1);
+        Imgproc.dilate(proj, dilate, dilateKernel, new Point(-1, -1), 1, Imgproc.BORDER_CONSTANT, Scalar.all(0.0));
+
+        Log.i(TAG, dilate.dump());
+        //logMat(rotated);
+
+        double projMean = Core.mean(proj).val[0];
+        double projValue = 0.0;
+        ArrayList<Integer> maxind = new ArrayList<Integer>();
+        for (int i = 0; i < cropped.cols(); i++) {
+            projValue = proj.get(0, i)[0];
+            if (dilate.get(0, i)[0] == projValue && projValue > projMean) {
+                maxind.add(i);
+            }
+        }
+
+        // determine the spatial frequency of the ridges by dividing the distance between
+        // the 1st and last peaks by the (No of peaks-1). If no peaks are detected
+        // or the wavelength is outside the allowed bounds, the frequency image is set to 0
+        Mat result = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
+        int peaks = maxind.size();
+        if (peaks > 2) {
+            int waveLength = maxind.get(peaks - 1) - maxind.get(0) / (peaks - 1);
+            if (waveLength > minWaveLength & waveLength < maxWaveLength) {
+                result = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(1.0));
+                Core.multiply(result, Scalar.all((double) (1 / waveLength)), result);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Calculate the median of all values greater than zero.
+     *
+     * @param image
+     * @return
+     */
+    private double medianFrequency(Mat image) {
+
+        ArrayList<Double> values = new ArrayList<Double>();
+        double value = 0;
+
+        for (int r = 0; r < image.rows(); r++) {
+            for (int c = 0; c < image.cols(); c++) {
+                value = image.get(r, c)[0];
+                if (value > 0) {
+                    values.add(value);
+                }
+            }
+        }
+
+        Collections.sort(values);
+        int size = values.size();
+        double median = 0;
+
+        if (size > 0) {
+            int halfSize = size / 2;
+            if ((size % 2) == 0) {
+                median = (values.get(halfSize - 1) + values.get(halfSize)) / 2.0;
+            } else {
+                median = values.get(halfSize);
+            }
+        }
+        return median;
     }
 
     /**
@@ -341,14 +492,14 @@ public class ProcessActivity extends Activity {
      * @param src2
      * @param dstn
      */
-    private void Atan2(Mat src1, Mat src2, Mat dstn) {
+    private void atan2(Mat src1, Mat src2, Mat dst) {
 
         int height = src1.height();
         int width = src2.width();
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                dstn.put(y, x, Core.fastAtan2((float) src1.get(y, x)[0], (float) src2.get(y, x)[0]));
+                dst.put(y, x, Core.fastAtan2((float) src1.get(y, x)[0], (float) src2.get(y, x)[0]));
             }
         }
     }

@@ -13,6 +13,8 @@ blksze = 16; thresh = 0.05;
 gradientsigma = 1; blocksigma = 5; orientsmoothsigma = 5;
 [newim, binim, mask] = testfin(imgGs, blksze, thresh, gradientsigma, blocksigma, orientsmoothsigma);
 
+show(binim);
+
 imgAcc = scaleImage(bwmorph(binim, 'thin', 'inf'), 0, 255);
 show(imgAcc);
 
