@@ -39,28 +39,25 @@
 %
 % January 2005
 
-function newim = ridgefilter(im, orient, freq, kx, ky, showfilter)
+function newim = ridgefilter(im, orient, freq, kx, ky)
 
-if nargin == 5
-    showfilter = 0;
-end
-
-angleInc = 3;  % Fixed angle increment between filter orientations in
+% Fixed angle increment between filter orientations in
 % degrees. This should divide evenly into 180
+angleInc = 3;
 
 im = double(im);
 [rows, cols] = size(im);
 newim = zeros(rows,cols);
 
-[validr,validc] = find(freq > 0);  % find where there is valid frequency data.
+% find where there is valid frequency data.
+[validr,validc] = find(freq > 0);
 ind = sub2ind([rows,cols], validr, validc);
 
 % Round the array of frequencies to the nearest 0.01 to reduce the
 % number of distinct frequencies we have to deal with.
 freq(ind) = round(freq(ind)*100)/100;
 
-% Generate an array of the distinct frequencies present in the array
-% freq
+% Generate an array of the distinct frequencies present in the array freq
 unfreq = unique(freq(ind));
 
 % Generate a table, given the frequency value multiplied by 100 to obtain
@@ -92,10 +89,6 @@ for k = 1:length(unfreq)
     for o = 1:180/angleInc
         filter{k,o} = imrotate(reffilter,-(o*angleInc+90),'bilinear','crop');
     end
-end
-
-if showfilter % Display largest scale filter for inspection
-    figure(7), imshow(filter{1,end},[]); title('filter');
 end
 
 % Find indices of matrix points greater than maxsze from the image boundary

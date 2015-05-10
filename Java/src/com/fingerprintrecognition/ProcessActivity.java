@@ -119,16 +119,16 @@ public class ProcessActivity extends Activity {
 
         // convert to float, very important
         Mat floated = new Mat(rows, cols, CvType.CV_32FC1);
-        Core.normalize(equalized, floated, 0, 255, Core.NORM_MINMAX, CvType.CV_32FC1);
+        equalized.convertTo(floated, CvType.CV_32FC1);
 
         // normalise image to have zero mean and 1 standard deviation
         Mat normalized = new Mat(rows, cols, CvType.CV_32FC1);
-        normalizeImage(floated, floated);
+        normalizeImage(floated, normalized);
 
         // step 1: get ridge segment by padding then do block process
         int blockSize = 16;
         double threshold = 0.05;
-        Mat padded = imagePadding(floated, blockSize);
+        Mat padded = imagePadding(normalized, blockSize);
         int imgRows = padded.rows();
         int imgCols = padded.cols();
         Mat matRidgeSegment = new Mat(imgRows, imgCols, CvType.CV_32FC1);
@@ -146,9 +146,15 @@ public class ProcessActivity extends Activity {
         int fBlockSize = 36;
         int fWindowSize = 5;
         int fMinWaveLength = 5;
-        int fMaxWaveLength = 15;
+        int fMaxWaveLength = 25;
         Mat matFrequency = new Mat(imgRows, imgCols, CvType.CV_32FC1);
-        ridgeFrequency(matRidgeSegment, segmentMask, matRidgeOrientation, matFrequency, fBlockSize, fWindowSize, fMinWaveLength, fMaxWaveLength);
+        double medianFreq = ridgeFrequency(matRidgeSegment, segmentMask, matRidgeOrientation, matFrequency, fBlockSize, fWindowSize, fMinWaveLength, fMaxWaveLength);
+
+        // step 4: get ridge filter
+        Mat matRidgeFilter = new Mat(imgRows, imgCols, CvType.CV_32FC1);
+        double filterKx = 0.5;
+        double filterKy = 0.5;
+        ridgeFilter(matRidgeSegment, matRidgeOrientation, matFrequency, matRidgeFilter, filterKx, filterKy, medianFreq);
 
         // normalize-back the result to the default range of the image and show it
         Mat result = new Mat(rows, cols, CvType.CV_8UC1);
@@ -294,8 +300,17 @@ public class ProcessActivity extends Activity {
 
     /**
      * Calculate ridge frequency.
+     * @param ridgeSegment
+     * @param segmentMask
+     * @param ridgeOrientation
+     * @param frequencies
+     * @param blockSize
+     * @param windowSize
+     * @param minWaveLength
+     * @param maxWaveLength
+     * @return
      */
-    private void ridgeFrequency(Mat ridgeSegment, Mat segmentMask, Mat ridgeOrientation, Mat frequencies, int blockSize, int windowSize, int minWaveLength, int maxWaveLength) {
+    private double ridgeFrequency(Mat ridgeSegment, Mat segmentMask, Mat ridgeOrientation, Mat frequencies, int blockSize, int windowSize, int minWaveLength, int maxWaveLength) {
 
         int rows = ridgeSegment.rows();
         int cols = ridgeSegment.cols();
@@ -309,7 +324,7 @@ public class ProcessActivity extends Activity {
                 blockSegment = ridgeSegment.submat(y, y + blockSize, x, x + blockSize);
                 blockOrientation = ridgeOrientation.submat(y, y + blockSize, x, x + blockSize);
                 frequency = calculateFrequency(blockSegment, blockOrientation, windowSize, minWaveLength, maxWaveLength);
-                frequency.copyTo(frequencies.rowRange(y, y + blockSize - 1).colRange(x, x + blockSize - 1));
+                frequency.copyTo(frequencies.rowRange(y, y + blockSize).colRange(x, x + blockSize));
             }
         }
 
@@ -321,6 +336,8 @@ public class ProcessActivity extends Activity {
 
         // the median frequency value used across the whole fingerprint gives a more satisfactory result
         Core.multiply(segmentMask, Scalar.all(medianFrequency), frequencies, 1.0, CvType.CV_32FC1);
+
+        return medianFrequency;
     }
 
     /**
@@ -382,17 +399,24 @@ public class ProcessActivity extends Activity {
         // dilation and then finding where the dilation equals the original values.
         Mat dilateKernel = new Mat(windowSize, windowSize, CvType.CV_32FC1, Scalar.all(1.0));
         Mat dilate = new Mat(1, cropped.cols(), CvType.CV_32FC1);
-        Imgproc.dilate(proj, dilate, dilateKernel, new Point(-1, -1), 1, Imgproc.BORDER_CONSTANT, Scalar.all(0.0));
-
-        Log.i(TAG, dilate.dump());
-        //logMat(rotated);
+        Imgproc.dilate(proj, dilate, dilateKernel, new Point(-1, -1), 1);
+        //Imgproc.dilate(proj, dilate, dilateKernel, new Point(-1, -1), 1, Imgproc.BORDER_CONSTANT, Scalar.all(0.0));
 
         double projMean = Core.mean(proj).val[0];
-        double projValue = 0.0;
+        double projValue;
+        double dilateValue;
+        final double ROUND_POINTS = 1000;
         ArrayList<Integer> maxind = new ArrayList<Integer>();
         for (int i = 0; i < cropped.cols(); i++) {
+
             projValue = proj.get(0, i)[0];
-            if (dilate.get(0, i)[0] == projValue && projValue > projMean) {
+            dilateValue = dilate.get(0, i)[0];
+
+            // round to maximize the likelihood of equality
+            projValue = (double) Math.round(projValue * ROUND_POINTS) / ROUND_POINTS;
+            dilateValue = (double) Math.round(dilateValue * ROUND_POINTS) / ROUND_POINTS;
+
+            if (dilateValue == projValue && projValue > projMean) {
                 maxind.add(i);
             }
         }
@@ -402,15 +426,90 @@ public class ProcessActivity extends Activity {
         // or the wavelength is outside the allowed bounds, the frequency image is set to 0
         Mat result = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
         int peaks = maxind.size();
-        if (peaks > 2) {
-            int waveLength = maxind.get(peaks - 1) - maxind.get(0) / (peaks - 1);
-            if (waveLength > minWaveLength & waveLength < maxWaveLength) {
-                result = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(1.0));
-                Core.multiply(result, Scalar.all((double) (1 / waveLength)), result);
+        if (peaks >= 2) {
+            double waveLength = (maxind.get(peaks - 1) - maxind.get(0)) / (peaks - 1);
+            if (waveLength >= minWaveLength && waveLength <= maxWaveLength) {
+                result = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all((1.0 / waveLength)));
             }
         }
 
         return result;
+    }
+
+    /**
+     * Enhance fingerprint image using oriented filters.
+     *
+     * @param ridgeSegment
+     * @param orientation
+     * @param frequency
+     * @param result
+     * @param kx
+     * @param ky
+     * @param medianFreq
+     * @return
+     */
+    private void ridgeFilter(Mat ridgeSegment, Mat orientation, Mat frequency, Mat result, double kx, double ky, double medianFreq) {
+
+        int angleInc = 3;
+        int rows = ridgeSegment.rows();
+        int cols = ridgeSegment.cols();
+
+        // find where there is valid frequency data
+        Mat threshold = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
+        Mat compareMask = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
+        Core.compare(frequency, threshold, compareMask, Core.CMP_GE);
+
+        // round the array of frequencies to the nearest 0.01 to reduce the
+        // number of distinct frequencies we have to deal with.
+        Mat roundedFrequency = roundMat(frequency, 100);
+
+        // get the distinct frequencies
+        uniqueFreq = uniqueValues(roundedFrequency, compareMask);
+    }
+
+    /**
+     * Round the values of the given mat to
+     *
+     * @param source
+     * @param points
+     * @return
+     */
+    private Mat roundMat(Mat source, double points) {
+
+        int cols = source.cols();
+        int rows = source.rows();
+
+        Mat doubleMat = new Mat(rows, cols, CvType.CV_32FC1);
+        Mat intMat = new Mat(rows, cols, CvType.CV_8UC1);
+
+        Core.multiply(source, Scalar.all(points), doubleMat);
+        doubleMat.convertTo(intMat, CvType.CV_8UC1);
+        intMat.convertTo(doubleMat, CvType.CV_32FC1);
+        Core.divide(doubleMat, Scalar.all(points), doubleMat);
+
+        return doubleMat;
+    }
+
+    /**
+     * Get unique items in the given mat using the given mask.
+     *
+     * @param source
+     * @param mask
+     * @return
+     */
+    private float[] uniqueValues(Mat source, Mat mask) {
+
+        Mat result = new Mat(source.cols(), source.rows(), CvType.CV_32FC1);
+        Core.multiply(source, mask, result, 1.0 , CvType.CV_32FC1);
+
+        logMat(source);
+        logMat(result);
+
+        int length = (int) (result.total());
+        float[] values = new float[length];
+        result.get(0, 0, values);
+
+        return values;
     }
 
     /**

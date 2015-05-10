@@ -71,8 +71,6 @@ dilation = ordfilt2(proj, windsze, ones(1,windsze));
 maxpts = (dilation == proj) & (proj > mean(proj));
 maxind = find(maxpts);
 
-show(dilation);
-
 % Determine the spatial frequency of the ridges by divinding the
 % distance between the 1st and last peaks by the (No of peaks-1). If no
 % peaks are detected, or the wavelength is outside the allowed bounds,
@@ -82,10 +80,10 @@ if length(maxind) < 2
 else
     NoOfPeaks = length(maxind);
     waveLength = (maxind(end)-maxind(1))/(NoOfPeaks-1);
-    if waveLength > minWaveLength & waveLength < maxWaveLength
-        freqim = 1/waveLength * ones(size(im));
+    if (waveLength > minWaveLength && waveLength < maxWaveLength)
+        freqim = (1/waveLength) * ones(size(im));
     else
-        freqim = zeros(size(im));
+        freqim = zeros(size(im));        
     end
 end
 

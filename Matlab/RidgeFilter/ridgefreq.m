@@ -70,7 +70,7 @@ end
 freq = freq.*mask;
 
 % Find median freqency over all the valid regions of the image.
-medianfreq = median(freq(find(freq>0)));
+medianfreq = median(freq(freq>0));
 
 % the median frequency value used across the whole 
 % fingerprint gives a more satisfactory result
