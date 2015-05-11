@@ -174,7 +174,10 @@ public class ProcessActivity extends Activity {
         // step 5: enhance image after ridge filter
         Mat matEnhanced = new Mat(imgRows, imgCols, CvType.CV_8UC1);
         enhancement(matRidgeFilter, matEnhanced, blockSize);
+
+        // finally, show the processed image
         showImage(matEnhanced);
+        processImageViewSource.setScaleType(ImageView.ScaleType.CENTER);
     }
 
     /**
@@ -556,7 +559,6 @@ public class ProcessActivity extends Activity {
                         && c > (size + 1)
                         && c < (cols - size - 1)) {
                     orientIndex = (int) orientIndexes.get(r, c)[0];
-                    // Log.i(TAG, String.format("Row %d, Column %d, rows %d, cols %d"", r, c, rows, cols));
                     subSegment = ridgeSegment.submat(r - size - 1, r + size, c - size - 1, c + size);
                     Core.multiply(subSegment, filters[orientIndex], value);
                     sum = Core.sumElems(value).val[0];
@@ -568,6 +570,7 @@ public class ProcessActivity extends Activity {
 
     /**
      * Enhance the image after ridge filter.
+     * Apply mask, binary threshold, thinning, ..., etc.
      *
      * @param source
      * @param result
@@ -575,7 +578,6 @@ public class ProcessActivity extends Activity {
      */
     private void enhancement(Mat source, Mat result, int blockSize) {
 
-        // apply mask, binary threshold, thinning, ..., etc
 
         Mat paddedMask = imagePadding(MatSnapShotMask, blockSize);
 
@@ -583,130 +585,69 @@ public class ProcessActivity extends Activity {
         Core.multiply(source, paddedMask, result, 1.0, CvType.CV_8UC1);
 
         // apply binary threshold
-        Core.MinMaxLocResult minMaxResult = Core.minMaxLoc(result);
-        Imgproc.threshold(result, result, 0, minMaxResult.maxVal, Imgproc.THRESH_BINARY);
-
-        // normalize the values to the full scale [0, 255]
-        Core.normalize(result, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+        Imgproc.threshold(result, result, 0, 1, Imgproc.THRESH_BINARY);
 
         // apply thinning
-        result = thin(result);
+        thin(result);
+
+        // normalize the values to the binary scale [0, 255]
+        // Core.normalize(result, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
     }
 
     /**
      * Thinning the given matrix.
+     *
      * @param source
      * @return
      */
-    private Mat thin(Mat source){
+    private void thin(Mat source) {
 
         int rows = source.rows();
         int cols = source.cols();
 
-        Mat sourceFloated = new Mat(rows, cols, CvType.CV_32FC1);
-        source.convertTo(sourceFloated, CvType.CV_32FC1);
+        Mat thin = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
 
-        /// start to thin
-        Mat p_thinMat1 = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
-        Mat p_thinMat2 = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
-        Mat p_cmp = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
-
-        boolean bDone = false;
-        while (!bDone) {
-            /// sub-iteration 1
-            thinSubIteration1(sourceFloated, p_thinMat1);
-            /// sub-iteration 2
-            thinSubIteration2(p_thinMat1, p_thinMat2);
-            /// compare
-            Core.compare(sourceFloated, p_thinMat2, p_cmp, Core.CMP_EQ);
-            /// check
-            int num_non_zero = Core.countNonZero(p_cmp);
-            if(num_non_zero == (rows + 2) * (cols + 2)) {
-                bDone = true;
-            }
-            /// copy
-            p_thinMat2.copyTo(sourceFloated);
+        int iterations = 10;
+        for (int i = 0; i < iterations; i++) {
+            thinSubIteration(source, thin);
+            thin.copyTo(source);
         }
-
-        // copy result
-        Mat result = new Mat(rows, cols, CvType.CV_8UC1);
-        sourceFloated.convertTo(result, CvType.CV_8UC1);
-        return  result;
     }
 
     /**
-     * Iteration 1 for thinning.
+     * Iteration for thinning.
+     *
      * @param pSrc
      * @param pDst
      */
-    private void thinSubIteration1(Mat pSrc, Mat pDst) {
+    private void thinSubIteration(Mat pSrc, Mat pDst) {
         int rows = pSrc.rows();
         int cols = pSrc.cols();
         pSrc.copyTo(pDst);
         for (int i = 1; i < rows - 1; i++) {
             for (int j = 1; j < cols - 1; j++) {
-                if (pSrc.get(i, j)[0] == 1.0f) {
+                if (pSrc.get(i, j)[0] == 1.0) {
                     /// get 8 neighbors
                     /// calculate C(p)
-                    int neighbor0 = (int) pSrc.get(i - 1, j - 1)[0];
-                    int neighbor1 = (int) pSrc.get(i - 1, j)[0];
-                    int neighbor2 = (int) pSrc.get(i - 1, j + 1)[0];
-                    int neighbor3 = (int) pSrc.get(i, j + 1)[0];
-                    int neighbor4 = (int) pSrc.get(i + 1, j + 1)[0];
-                    int neighbor5 = (int) pSrc.get(i + 1, j)[0];
-                    int neighbor6 = (int) pSrc.get(i + 1, j - 1)[0];
-                    int neighbor7 = (int) pSrc.get(i, j - 1)[0];
-                    int C = (~neighbor1 & (neighbor2 | neighbor3)) + (~neighbor3 & (neighbor4 | neighbor5)) + (~neighbor5 & (neighbor6 | neighbor7)) + (~neighbor7 & (neighbor0 | neighbor1));
-                    if (C == 1) {
+                    int n0 = (int) pSrc.get(i - 1, j - 1)[0];
+                    int n1 = (int) pSrc.get(i - 1, j)[0];
+                    int n2 = (int) pSrc.get(i - 1, j + 1)[0];
+                    int n3 = (int) pSrc.get(i, j + 1)[0];
+                    int n4 = (int) pSrc.get(i + 1, j + 1)[0];
+                    int n5 = (int) pSrc.get(i + 1, j)[0];
+                    int n6 = (int) pSrc.get(i + 1, j - 1)[0];
+                    int n7 = (int) pSrc.get(i, j - 1)[0];
+                    int C = (~n1 & (n2 | n3)) + (~n3 & (n4 | n5)) + (~n5 & (n6 | n7)) + (~n7 & (n0 | n1));
+                    if (C > 0) {
                         /// calculate N
-                        int N1 = (neighbor0 | neighbor1) + (neighbor2 | neighbor3) + (neighbor4 | neighbor5) + (neighbor6 | neighbor7);
-                        int N2 = (neighbor1 | neighbor2) + (neighbor3 | neighbor4) + (neighbor5 | neighbor6) + (neighbor7 | neighbor0);
+                        int N1 = (n0 | n1) + (n2 | n3) + (n4 | n5) + (n6 | n7);
+                        int N2 = (n1 | n2) + (n3 | n4) + (n5 | n6) + (n7 | n0);
                         int N = Math.min(N1, N2);
                         if ((N == 2) || (N == 3)) {
                             /// calculate criteria 3
-                            int c3 = (neighbor1 | neighbor2 | ~neighbor4) & neighbor3;
+                            int c3 = (n1 | n2 | ~n4) & n3;
                             if (c3 == 0) {
-                                pDst.put(i, j, 0.0f);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Iteration 2 for thinning.
-     * @param pSrc
-     * @param pDst
-     */
-    private void thinSubIteration2(Mat pSrc, Mat pDst) {
-        int rows = pSrc.rows();
-        int cols = pSrc.cols();
-        pSrc.copyTo(pDst);
-        for (int i = 1; i < rows - 1; i++) {
-            for (int j = 1; j < cols - 1; j++) {
-                if (pSrc.get(i, j)[0] == 1.0f) {
-                    /// get 8 neighbors
-                    /// calculate C(p)
-                    int neighbor0 = (int) pSrc.get(i - 1, j - 1)[0];
-                    int neighbor1 = (int) pSrc.get(i - 1, j)[0];
-                    int neighbor2 = (int) pSrc.get(i - 1, j + 1)[0];
-                    int neighbor3 = (int) pSrc.get(i, j + 1)[0];
-                    int neighbor4 = (int) pSrc.get(i + 1, j + 1)[0];
-                    int neighbor5 = (int) pSrc.get(i + 1, j)[0];
-                    int neighbor6 = (int) pSrc.get(i + 1, j - 1)[0];
-                    int neighbor7 = (int) pSrc.get(i, j - 1)[0];
-                    int C = (~neighbor1 & (neighbor2 | neighbor3)) + (~neighbor3 & (neighbor4 | neighbor5)) + (~neighbor5 & (neighbor6 | neighbor7)) + (~neighbor7 & (neighbor0 | neighbor1));
-                    if (C == 1) {
-                        /// calculate N
-                        int N1 = (neighbor0 | neighbor1) + (neighbor2 | neighbor3) + (neighbor4 | neighbor5) + (neighbor6 | neighbor7);
-                        int N2 = (neighbor1 | neighbor2) + (neighbor3 | neighbor4) + (neighbor5 | neighbor6) + (neighbor7 | neighbor0);
-                        int N = Math.min(N1, N2);
-                        if ((N == 2) || (N == 3)) {
-                            int E = (neighbor5 | neighbor6 | ~neighbor0) & neighbor7;
-                            if (E == 0) {
-                                pDst.put(i, j, 0.0f);
+                                pDst.put(i, j, 0.0);
                             }
                         }
                     }

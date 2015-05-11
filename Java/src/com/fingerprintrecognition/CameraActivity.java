@@ -272,7 +272,7 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     private Mat snapShotMask(int rows, int cols){
 
         Point center = new Point(cols / 2, rows / 2);
-        Size axes = new Size(180, 120);
+        Size axes = new Size(170, 110);
         Scalar scalarWhite = new Scalar(255, 255, 255);
         Scalar scalarGray = new Scalar(100, 100, 100);
         Scalar scalarBlack = new Scalar(0, 0, 0);
