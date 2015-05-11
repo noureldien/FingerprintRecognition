@@ -172,7 +172,7 @@ public class ProcessActivity extends Activity {
         ridgeFilter(matRidgeSegment, matRidgeOrientation, matFrequency, matRidgeFilter, filterKx, filterKy, medianFreq);
 
         // step 5: enhance image after ridge filter
-        Mat matEnhanced = new Mat(imgRows, imgCols, CvType.CV_32FC1);
+        Mat matEnhanced = new Mat(imgRows, imgCols, CvType.CV_8UC1);
         enhancement(matRidgeFilter, matEnhanced, blockSize);
         showImage(matEnhanced);
     }
@@ -568,22 +568,283 @@ public class ProcessActivity extends Activity {
 
     /**
      * Enhance the image after ridge filter.
+     *
      * @param source
      * @param result
      * @param blockSize
      */
-    private void enhancement(Mat source, Mat result, int blockSize){
+    private void enhancement(Mat source, Mat result, int blockSize) {
 
         // apply mask, binary threshold, thinning, ..., etc
 
         Mat paddedMask = imagePadding(MatSnapShotMask, blockSize);
 
         // apply the original mask to get rid of extras
-        Core.multiply(source, paddedMask, result, 1.0 , CvType.CV_32FC1);
+        Core.multiply(source, paddedMask, result, 1.0, CvType.CV_8UC1);
 
         // apply binary threshold
-        Core.MinMaxLocResult minMaxResult = Core.minMaxLoc(source);
+        Core.MinMaxLocResult minMaxResult = Core.minMaxLoc(result);
         Imgproc.threshold(result, result, 0, minMaxResult.maxVal, Imgproc.THRESH_BINARY);
+
+        // normalize the values to the full scale [0, 255]
+        Core.normalize(result, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+
+        // apply thinning
+        result = thin(result);
+    }
+
+    /**
+     * Thinning the given matrix.
+     * @param source
+     * @return
+     */
+    private Mat thin(Mat source){
+
+        int rows = source.rows();
+        int cols = source.cols();
+
+        Mat sourceFloated = new Mat(rows, cols, CvType.CV_32FC1);
+        source.convertTo(sourceFloated, CvType.CV_32FC1);
+
+        /// start to thin
+        Mat p_thinMat1 = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
+        Mat p_thinMat2 = new Mat(rows, cols, CvType.CV_32FC1, Scalar.all(0.0));
+        Mat p_cmp = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
+
+        boolean bDone = false;
+        while (!bDone) {
+            /// sub-iteration 1
+            thinSubIteration1(sourceFloated, p_thinMat1);
+            /// sub-iteration 2
+            thinSubIteration2(p_thinMat1, p_thinMat2);
+            /// compare
+            Core.compare(sourceFloated, p_thinMat2, p_cmp, Core.CMP_EQ);
+            /// check
+            int num_non_zero = Core.countNonZero(p_cmp);
+            if(num_non_zero == (rows + 2) * (cols + 2)) {
+                bDone = true;
+            }
+            /// copy
+            p_thinMat2.copyTo(sourceFloated);
+        }
+
+        // copy result
+        Mat result = new Mat(rows, cols, CvType.CV_8UC1);
+        sourceFloated.convertTo(result, CvType.CV_8UC1);
+        return  result;
+    }
+
+    /**
+     * Iteration 1 for thinning.
+     * @param pSrc
+     * @param pDst
+     */
+    private void thinSubIteration1(Mat pSrc, Mat pDst) {
+        int rows = pSrc.rows();
+        int cols = pSrc.cols();
+        pSrc.copyTo(pDst);
+        for (int i = 1; i < rows - 1; i++) {
+            for (int j = 1; j < cols - 1; j++) {
+                if (pSrc.get(i, j)[0] == 1.0f) {
+                    /// get 8 neighbors
+                    /// calculate C(p)
+                    int neighbor0 = (int) pSrc.get(i - 1, j - 1)[0];
+                    int neighbor1 = (int) pSrc.get(i - 1, j)[0];
+                    int neighbor2 = (int) pSrc.get(i - 1, j + 1)[0];
+                    int neighbor3 = (int) pSrc.get(i, j + 1)[0];
+                    int neighbor4 = (int) pSrc.get(i + 1, j + 1)[0];
+                    int neighbor5 = (int) pSrc.get(i + 1, j)[0];
+                    int neighbor6 = (int) pSrc.get(i + 1, j - 1)[0];
+                    int neighbor7 = (int) pSrc.get(i, j - 1)[0];
+                    int C = (~neighbor1 & (neighbor2 | neighbor3)) + (~neighbor3 & (neighbor4 | neighbor5)) + (~neighbor5 & (neighbor6 | neighbor7)) + (~neighbor7 & (neighbor0 | neighbor1));
+                    if (C == 1) {
+                        /// calculate N
+                        int N1 = (neighbor0 | neighbor1) + (neighbor2 | neighbor3) + (neighbor4 | neighbor5) + (neighbor6 | neighbor7);
+                        int N2 = (neighbor1 | neighbor2) + (neighbor3 | neighbor4) + (neighbor5 | neighbor6) + (neighbor7 | neighbor0);
+                        int N = Math.min(N1, N2);
+                        if ((N == 2) || (N == 3)) {
+                            /// calculate criteria 3
+                            int c3 = (neighbor1 | neighbor2 | ~neighbor4) & neighbor3;
+                            if (c3 == 0) {
+                                pDst.put(i, j, 0.0f);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Iteration 2 for thinning.
+     * @param pSrc
+     * @param pDst
+     */
+    private void thinSubIteration2(Mat pSrc, Mat pDst) {
+        int rows = pSrc.rows();
+        int cols = pSrc.cols();
+        pSrc.copyTo(pDst);
+        for (int i = 1; i < rows - 1; i++) {
+            for (int j = 1; j < cols - 1; j++) {
+                if (pSrc.get(i, j)[0] == 1.0f) {
+                    /// get 8 neighbors
+                    /// calculate C(p)
+                    int neighbor0 = (int) pSrc.get(i - 1, j - 1)[0];
+                    int neighbor1 = (int) pSrc.get(i - 1, j)[0];
+                    int neighbor2 = (int) pSrc.get(i - 1, j + 1)[0];
+                    int neighbor3 = (int) pSrc.get(i, j + 1)[0];
+                    int neighbor4 = (int) pSrc.get(i + 1, j + 1)[0];
+                    int neighbor5 = (int) pSrc.get(i + 1, j)[0];
+                    int neighbor6 = (int) pSrc.get(i + 1, j - 1)[0];
+                    int neighbor7 = (int) pSrc.get(i, j - 1)[0];
+                    int C = (~neighbor1 & (neighbor2 | neighbor3)) + (~neighbor3 & (neighbor4 | neighbor5)) + (~neighbor5 & (neighbor6 | neighbor7)) + (~neighbor7 & (neighbor0 | neighbor1));
+                    if (C == 1) {
+                        /// calculate N
+                        int N1 = (neighbor0 | neighbor1) + (neighbor2 | neighbor3) + (neighbor4 | neighbor5) + (neighbor6 | neighbor7);
+                        int N2 = (neighbor1 | neighbor2) + (neighbor3 | neighbor4) + (neighbor5 | neighbor6) + (neighbor7 | neighbor0);
+                        int N = Math.min(N1, N2);
+                        if ((N == 2) || (N == 3)) {
+                            int E = (neighbor5 | neighbor6 | ~neighbor0) & neighbor7;
+                            if (E == 0) {
+                                pDst.put(i, j, 0.0f);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Function for thinning the given binary image
+     *
+     * @param im
+     */
+    private void thinningGuoHall(Mat im) {
+
+        int rows = im.rows();
+        int cols = im.cols();
+
+        Core.divide(im, Scalar.all(255.0), im);
+        Mat prev = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
+        Mat diff = new Mat(rows, cols, CvType.CV_8UC1);
+
+        do {
+            thinningGuoHallIteration(im, 0);
+            thinningGuoHallIteration(im, 1);
+            Core.absdiff(im, prev, diff);
+            im.copyTo(prev);
+        }
+        while (Core.countNonZero(diff) > 0);
+
+        Core.multiply(im, Scalar.all(255.0), im);
+    }
+
+    /**
+     * Perform one thinning iteration.
+     * Normally you wouldn't call this function directly from your code.
+     *
+     * @param im         Binary image with range = 0-1
+     * @param iterations 0=even, 1=odd
+     */
+    private void thinningGuoHallIteration(Mat im, int iterations) {
+
+        int rows = im.rows();
+        int cols = im.cols();
+
+        Mat marker = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
+
+        for (int i = 1; i < rows - 1; i++) {
+            for (int j = 1; j < cols - 1; j++) {
+                byte p2 = (byte) im.get(i - 1, j)[0];
+                byte p3 = (byte) im.get(i - 1, j + 1)[0];
+                byte p4 = (byte) im.get(i, j + 1)[0];
+                byte p5 = (byte) im.get(i + 1, j + 1)[0];
+                byte p6 = (byte) im.get(i + 1, j)[0];
+                byte p7 = (byte) im.get(i + 1, j - 1)[0];
+                byte p8 = (byte) im.get(i, j - 1)[0];
+                byte p9 = (byte) im.get(i - 1, j - 1)[0];
+
+                int C = (~p2 & (p3 | p4)) + (~p4 & (p5 | p6)) + (~p6 & (p7 | p8)) + (~p8 & (p9 | p2));
+                int N1 = (p9 | p2) + (p3 | p4) + (p5 | p6) + (p7 | p8);
+                int N2 = (p2 | p3) + (p4 | p5) + (p6 | p7) + (p8 | p9);
+                int N = N1 < N2 ? N1 : N2;
+                int m = iterations == 0 ? ((p6 | p7 | ~p9) & p8) : ((p2 | p3 | ~p5) & p4);
+
+                if (C == 1 && (N >= 2 && N <= 3) & m == 0) {
+                    marker.put(i, j, 1);
+                }
+            }
+        }
+
+        Core.bitwise_not(marker, marker);
+        Core.add(im, marker, im);
+    }
+
+    /**
+     * Function for thinning the given binary image
+     *
+     * @param im Binary image with range = 0-255
+     */
+    void thinning(Mat im) {
+
+        int rows = im.rows();
+        int cols = im.cols();
+
+        Core.divide(im, Scalar.all(255.0), im);
+
+        Mat prev = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
+        Mat diff = new Mat(rows, cols, CvType.CV_8UC1);
+
+        do {
+            thinningIteration(im, 0);
+            thinningIteration(im, 1);
+            Core.absdiff(im, prev, diff);
+            im.copyTo(prev);
+        }
+        while (Core.countNonZero(diff) > 0);
+
+        Core.multiply(im, Scalar.all(255.0), im);
+    }
+
+    /**
+     * Perform one thinning iteration.
+     * Normally you wouldn't call this function directly from your code.
+     *
+     * @param im         Binary image with range = 0-1
+     * @param iterations 0=even, 1=odd
+     */
+    private void thinningIteration(Mat im, int iterations) {
+        int rows = im.rows();
+        int cols = im.cols();
+
+        Mat marker = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
+
+        for (int i = 1; i < rows - 1; i++) {
+            for (int j = 1; j < cols - 1; j++) {
+                byte p2 = (byte) im.get(i - 1, j)[0];
+                byte p3 = (byte) im.get(i - 1, j + 1)[0];
+                byte p4 = (byte) im.get(i, j + 1)[0];
+                byte p5 = (byte) im.get(i + 1, j + 1)[0];
+                byte p6 = (byte) im.get(i + 1, j)[0];
+                byte p7 = (byte) im.get(i + 1, j - 1)[0];
+                byte p8 = (byte) im.get(i, j - 1)[0];
+                byte p9 = (byte) im.get(i - 1, j - 1)[0];
+
+                boolean a = (p2 == 0 && p3 == 1) || (p3 == 0 && p4 == 1) || (p4 == 0 && p5 == 1) || (p5 == 0 && p6 == 1) || (p6 == 0 && p7 == 1) || (p7 == 0 && p8 == 1) || (p8 == 0 && p9 == 1) || (p9 == 0 && p2 == 1);
+                int A = a ? 1 : 0;
+                int B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+                int m1 = iterations == 0 ? (p2 * p4 * p6) : (p2 * p4 * p8);
+                int m2 = iterations == 0 ? (p4 * p6 * p8) : (p2 * p6 * p8);
+
+                if (A == 1 && (B >= 2 && B <= 6) && m1 == 0 && m2 == 0) {
+                    marker.put(i, j, 1);
+                }
+            }
+        }
+
+        Core.bitwise_not(marker, marker);
+        Core.add(im, marker, im);
     }
 
     /**
