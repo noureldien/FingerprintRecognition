@@ -1,10 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:orientation="vertical"
+              android:orientation="horizontal"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
-              android:background="@android:color/black">
+              android:background="@android:color/white">
+    <LinearLayout android:layout_width="wrap_content"
+                  android:layout_height="match_parent"
+                  android:orientation="vertical">
+        <View android:layout_height="40dp"
+              android:layout_width="match_parent"/>
+        <Button android:id="@+id/processButtonOriginal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="1"/>
+        <Button android:id="@+id/processButtonOrient"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="2"/>
+        <Button android:id="@+id/processButtonFilter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="3"/>
+        <Button android:id="@+id/processButtonEnhanced"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="4"/>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:orientation="vertical">
     <ImageView android:layout_width="match_parent"
-               android:layout_height="match_parent"
+               android:layout_height="0dp"
+               android:layout_weight="1"
+               android:scaleType="center"
                android:id="@+id/processImageViewSource"/>
+        <LinearLayout android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal">
+            <Button android:id="@+id/processButtonSave"
+                    android:layout_height="wrap_content"
+                    android:layout_width="90dp"
+                    android:textAppearance="?android:attr/textAppearanceSmall"
+                    android:text="Save"/>
+            <Button android:id="@+id/processButtonQuery"
+                    android:layout_height="wrap_content"
+                    android:layout_width="90dp"
+                    android:textAppearance="?android:attr/textAppearanceSmall"
+                    android:text="Query"/>
+            <Button android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Settings"
+                    android:textAppearance="?android:attr/textAppearanceSmall"
+                    android:id="@+id/processButtonSettings"/>
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

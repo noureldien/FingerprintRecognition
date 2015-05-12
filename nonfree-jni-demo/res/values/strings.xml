@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">nonfree-jni-demo</string>
+    <string name="action_settings">Settings</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="nonfree_jni_demo">Nonfree JNI Demo</string>
+    <string name="run_demo">Run Demo!</string>
+
+</resources>

@@ -7,10 +7,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity android:name=".CameraActivity" android:screenOrientation="landscape" android:label="Camera" android:theme="@style/AppThemeTransparent" android:configChanges="keyboardHidden|orientation">
-        </activity>
-        <activity android:name=".ProcessActivity" android:screenOrientation="landscape" android:label="Process" android:theme="@style/AppThemeTransparent">
-        </activity>
+        <activity android:name=".CameraActivity" android:screenOrientation="landscape" android:label="Camera" android:theme="@style/AppThemeTransparent" android:configChanges="keyboardHidden|orientation"/>
+        <activity android:name=".ProcessActivity" android:screenOrientation="landscape" android:label="Process" android:theme="@style/AppThemeTransparent"/>
+        <activity android:name=".MatchActivity" android:screenOrientation="landscape" android:label="Match" android:theme="@style/AppThemeTransparent"/>
+        <activity android:name=".ResultActivity" android:screenOrientation="landscape" android:label="Result" android:theme="@style/AppThemeTransparent"/>
+        <activity android:name=".SettingsActivity" android:screenOrientation="landscape" android:label="Result" android:theme="@style/AppThemeTransparent"/>
     </application>
     <uses-sdk android:minSdkVersion="15" android:targetSdkVersion="15"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

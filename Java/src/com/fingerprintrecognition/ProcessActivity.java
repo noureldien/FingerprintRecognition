@@ -2,13 +2,21 @@ package com.fingerprintrecognition;
 
 import android.app.ActionBar;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.TextView;
 import org.opencv.android.Utils;
 import org.opencv.core.*;
 import org.opencv.imgproc.Imgproc;
@@ -41,7 +49,12 @@ public class ProcessActivity extends Activity {
 
     // region Private Variables
 
-    private ImageView processImageViewSource;
+    private ImageView imageViewSource;
+
+    private Mat matRidgeOrientation;
+    private Mat matRidgeFilter;
+    private Mat matEnhanced;
+    private Mat matResult;
 
     //endregion Private Variables
 
@@ -83,6 +96,102 @@ public class ProcessActivity extends Activity {
 
     // endregion Public Methods
 
+    // region Private Event Handlers
+
+    /**
+     * Save the result image to the database.
+     *
+     * @param view
+     */
+    private void buttonSave_OnClick(View view) {
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        LayoutInflater inflater = this.getLayoutInflater();
+        View layout = inflater.inflate(R.layout.processdialogview, null);
+        final TextView textView = (TextView) layout.findViewById(R.id.processDialogViewTextView);
+        builder.setView(layout);
+        builder.setTitle("Image Name");
+        builder.setNegativeButton("Cancel", null);
+        builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                String imageName = textView.getText().toString();
+                CameraActivity.addProcessedImage(matResult, imageName);
+            }
+        });
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
+    /**
+     * Query the current image to get it's identity. This is done using SIFT, matching, RANSAC
+     *
+     * @param view
+     */
+    private void buttonQuery_OnClick(View view) {
+
+        // navigate to match activity
+        MatchActivity.MatQuery = matResult;
+        Intent intent = new Intent(this, com.fingerprintrecognition.MatchActivity.class);
+        this.startActivity(intent);
+    }
+
+    /**
+     * Navigate to Settings activity.
+     *
+     * @param view
+     */
+    private void buttonSettings_OnClick(View view) {
+
+        // navigate to Settings activity
+        Intent intent = new Intent(this, com.fingerprintrecognition.SettingsActivity.class);
+        this.startActivity(intent);
+    }
+
+    /**
+     * Show original image.
+     *
+     * @param view
+     */
+    private void buttonOriginal_OnClick(View view) {
+
+        this.showImage(MatSnapShot);
+    }
+
+    /**
+     * Show orientation image.
+     *
+     * @param view
+     */
+    private void buttonOrient_OnClick(View view) {
+
+        this.showImage(matRidgeOrientation);
+    }
+
+    /**
+     * Show filter image.
+     *
+     * @param view
+     */
+    private void buttonFilter_OnClick(View view) {
+
+        this.showImage(matRidgeFilter);
+
+    }
+
+    /**
+     * Show enhanced image.
+     *
+     * @param view
+     */
+    private void buttonEnhanced_OnClick(View view) {
+
+        this.showImage(matEnhanced);
+
+    }
+
+    // endregion Private Event Handlers
+
     // region Private Methods
 
     /**
@@ -98,8 +207,59 @@ public class ProcessActivity extends Activity {
         actionBar.setDisplayHomeAsUpEnabled(true);
 
         // convert to bitmap and show
-        processImageViewSource = (ImageView) this.findViewById(R.id.processImageViewSource);
-        processImageViewSource.setImageBitmap(matToBitmap(MatSnapShot));
+        imageViewSource = (ImageView) this.findViewById(R.id.processImageViewSource);
+        imageViewSource.setImageBitmap(matToBitmap(MatSnapShot));
+
+        // event handlers
+        Button buttonSave = (Button) findViewById(R.id.processButtonSave);
+        buttonSave.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonSave_OnClick(view);
+            }
+        });
+        Button buttonQuery = (Button) findViewById(R.id.processButtonQuery);
+        buttonQuery.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonQuery_OnClick(view);
+            }
+        });
+        Button buttonSettings = (Button) findViewById(R.id.processButtonSettings);
+        buttonSettings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonSettings_OnClick(view);
+            }
+        });
+        Button buttonOriginal = (Button) findViewById(R.id.processButtonOriginal);
+        buttonOriginal.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonOriginal_OnClick(view);
+            }
+        });
+        Button buttonOrient = (Button) findViewById(R.id.processButtonOrient);
+        buttonOrient.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonOrient_OnClick(view);
+            }
+        });
+        Button buttonFilter = (Button) findViewById(R.id.processButtonFilter);
+        buttonFilter.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonFilter_OnClick(view);
+            }
+        });
+        Button buttonEnhanced = (Button) findViewById(R.id.processButtonEnhanced);
+        buttonEnhanced.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonEnhanced_OnClick(view);
+            }
+        });
 
         // start processing the image
         processImage();
@@ -117,7 +277,7 @@ public class ProcessActivity extends Activity {
 
         Mat result = new Mat(rows, cols, CvType.CV_8UC1);
         Core.normalize(image, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
-        processImageViewSource.setImageBitmap(matToBitmap(result));
+        imageViewSource.setImageBitmap(matToBitmap(result));
     }
 
     /**
@@ -129,19 +289,19 @@ public class ProcessActivity extends Activity {
         int cols = MatSnapShot.cols();
 
         // apply histogram equalization
-        //Mat equalized = new Mat(rows, cols, CvType.CV_32FC1);
-        //Imgproc.equalizeHist(MatSnapShot, equalized);
+        Mat equalized = new Mat(rows, cols, CvType.CV_32FC1);
+        Imgproc.equalizeHist(MatSnapShot, equalized);
 
         // convert to float, very important
         Mat floated = new Mat(rows, cols, CvType.CV_32FC1);
-        MatSnapShot.convertTo(floated, CvType.CV_32FC1);
+        equalized.convertTo(floated, CvType.CV_32FC1);
 
         // normalise image to have zero mean and 1 standard deviation
         Mat normalized = new Mat(rows, cols, CvType.CV_32FC1);
         normalizeImage(floated, normalized);
 
         // step 1: get ridge segment by padding then do block process
-        int blockSize = 16;
+        int blockSize = 24;
         double threshold = 0.05;
         Mat padded = imagePadding(floated, blockSize);
         int imgRows = padded.rows();
@@ -152,9 +312,9 @@ public class ProcessActivity extends Activity {
 
         // step 2: get ridge orientation
         int gradientSigma = 1;
-        int blockSigma = 5;
-        int orientSmoothSigma = 5;
-        Mat matRidgeOrientation = new Mat(imgRows, imgCols, CvType.CV_32FC1);
+        int blockSigma = 13;
+        int orientSmoothSigma = 15;
+        matRidgeOrientation = new Mat(imgRows, imgCols, CvType.CV_32FC1);
         ridgeOrientation(matRidgeSegment, matRidgeOrientation, gradientSigma, blockSigma, orientSmoothSigma);
 
         // step 3: get ridge frequency
@@ -166,18 +326,19 @@ public class ProcessActivity extends Activity {
         double medianFreq = ridgeFrequency(matRidgeSegment, segmentMask, matRidgeOrientation, matFrequency, fBlockSize, fWindowSize, fMinWaveLength, fMaxWaveLength);
 
         // step 4: get ridge filter
-        Mat matRidgeFilter = new Mat(imgRows, imgCols, CvType.CV_32FC1);
-        double filterKx = 0.5;
-        double filterKy = 0.5;
-        ridgeFilter(matRidgeSegment, matRidgeOrientation, matFrequency, matRidgeFilter, filterKx, filterKy, medianFreq);
+        matRidgeFilter = new Mat(imgRows, imgCols, CvType.CV_32FC1);
+        double filterSize = 1.9;
+        ridgeFilter(matRidgeSegment, matRidgeOrientation, matFrequency, matRidgeFilter, filterSize, filterSize, medianFreq);
 
         // step 5: enhance image after ridge filter
-        Mat matEnhanced = new Mat(imgRows, imgCols, CvType.CV_8UC1);
+        matEnhanced = new Mat(imgRows, imgCols, CvType.CV_8UC1);
         enhancement(matRidgeFilter, matEnhanced, blockSize);
+
+        // set process result
+        matResult = matEnhanced.clone();
 
         // finally, show the processed image
         showImage(matEnhanced);
-        processImageViewSource.setScaleType(ImageView.ScaleType.CENTER);
     }
 
     /**
@@ -479,7 +640,7 @@ public class ProcessActivity extends Activity {
         int rows = ridgeSegment.rows();
         int cols = ridgeSegment.cols();
 
-        int filterCount = 180 / 3;
+        int filterCount = 180 / angleInc;
         Mat[] filters = new Mat[filterCount];
 
         double sigmaX = kx / medianFreq;
@@ -578,36 +739,42 @@ public class ProcessActivity extends Activity {
      */
     private void enhancement(Mat source, Mat result, int blockSize) {
 
-
         Mat paddedMask = imagePadding(MatSnapShotMask, blockSize);
 
         // apply the original mask to get rid of extras
         Core.multiply(source, paddedMask, result, 1.0, CvType.CV_8UC1);
 
         // apply binary threshold
-        Imgproc.threshold(result, result, 0, 1, Imgproc.THRESH_BINARY);
+        Imgproc.threshold(result, result, 0, 255, Imgproc.THRESH_BINARY);
 
         // apply thinning
-        thin(result);
+        //int thinIterations = 2;
+        //thin(result, thinIterations);
 
-        // normalize the values to the binary scale [0, 255]
-        // Core.normalize(result, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+        //// normalize the values to the binary scale [0, 255]
+        //Core.normalize(result, result, 0, 255, Core.NORM_MINMAX, CvType.CV_8UC1);
+
+        // apply morphing (erosion, opening, ... )
+        //int erosionSize = 1;
+        //int erosionLength = 2 * erosionSize + 1;
+        //Mat erosionKernel = Imgproc.getStructuringElement(Imgproc.MORPH_CROSS, new Size(erosionLength, erosionLength), new Point(erosionSize, erosionSize));
+        //Imgproc.erode(result, result, erosionKernel);
     }
 
     /**
      * Thinning the given matrix.
      *
      * @param source
+     * @param iterations
      * @return
      */
-    private void thin(Mat source) {
+    private void thin(Mat source, int iterations) {
 
         int rows = source.rows();
         int cols = source.cols();
 
         Mat thin = new Mat(rows, cols, CvType.CV_8UC1, Scalar.all(0.0));
 
-        int iterations = 10;
         for (int i = 0; i < iterations; i++) {
             thinSubIteration(source, thin);
             thin.copyTo(source);

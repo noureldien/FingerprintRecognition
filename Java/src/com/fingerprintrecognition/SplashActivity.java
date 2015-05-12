@@ -41,7 +41,6 @@ public class SplashActivity extends Activity {
                 SplashActivity.this.finish();
             }
         }, 1000);
-
     }
 
     // endregion Private Methods

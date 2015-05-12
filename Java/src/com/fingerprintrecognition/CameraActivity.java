@@ -1,26 +1,43 @@
 package com.fingerprintrecognition;
 
 import android.app.ActionBar;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.hardware.Camera;
 import android.util.Log;
-import android.view.MenuItem;
+import android.view.*;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
 import com.fingerprintrecognition.app.*;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
+import org.opencv.calib3d.Calib3d;
 import org.opencv.core.*;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
+import org.opencv.features2d.*;
+import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.android.BaseLoaderCallback;
+import org.opencv.android.LoaderCallbackInterface;
+import org.opencv.android.OpenCVLoader;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.WindowManager;
+import android.util.Log;
 import android.view.View.OnTouchListener;
+
+import java.util.*;
 
 /**
  * Show camera and take snapShot.
@@ -30,6 +47,7 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     // region Private Static Variables
 
     private static final String TAG = "FingerprintRecognition::CameraActivity";
+    private static HashMap<String, Mat> processedImages;
 
     // endregion Private Variables
 
@@ -37,7 +55,11 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
 
     private Mat matCameraFrame;
     private AppJavaCameraView cameraView;
+    private ImageView imageView;
+    private TextView textViewCounter;
     private android.hardware.Camera.Size cameraSize;
+    private int maskWidth;
+    private int maskHeight;
 
     // endregion Private Variables
 
@@ -70,6 +92,59 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     }
 
     // endregion Constructor
+
+    // region Public Static Method
+
+    /**
+     * Add processed image to the list.
+     *
+     * @param image
+     * @param name
+     */
+    public static void addProcessedImage(Mat image, String name) {
+
+        processedImages.put(name, image);
+
+    }
+
+    /**
+     * Get processed image from the list, with the given name/key.
+     *
+     * @param name
+     */
+    public static Mat getProcessedImage(String name) {
+
+        return processedImages.get(name);
+    }
+
+    /**
+     * Get processed image from the list, with the given index.
+     *
+     * @param index
+     */
+    public static Mat getProcessedImage(int index) {
+
+        ArrayList keys = new ArrayList(processedImages.keySet());
+        return processedImages.get(keys.get(index));
+    }
+
+    /**
+     * Get names of the processed images.
+     */
+    public static Object[] getProcessedImageNames() {
+
+        return processedImages.keySet().toArray();
+    }
+
+    /**
+     * Count processed images.
+     */
+    public static int processedImageCount() {
+
+        return processedImages.size();
+    }
+
+    // endregion Public Static Method
 
     // region Public Methods
 
@@ -108,8 +183,25 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
 
     @Override
     public void onResume() {
+
         super.onResume();
+
+        // re-load openCV
         OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_9, this, mLoaderCallback);
+
+        // this is to over-come the problem of SIFT does not exist in default openCV
+        try {
+            // Load necessary libraries.
+            System.loadLibrary("opencv_java");
+            System.loadLibrary("nonfree");
+            System.loadLibrary("nonfree_jni");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "Couldn't load this libs");
+        }
+
+        // update counter
+        int count = processedImageCount();
+        textViewCounter.setText(Integer.toString(count));
     }
 
     public void onDestroy() {
@@ -144,7 +236,7 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
 
     public boolean onTouch(View v, MotionEvent event) {
 
-        processOnTouch();
+        cameraView_OnTouch(v, event);
         return false;
     }
 
@@ -156,6 +248,67 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     }
 
     // endregion Public Methods
+
+    // region Private Event Handlers
+
+    /**
+     * Navigate to process activity.
+     *
+     * @param view
+     */
+    private void buttonProcess_OnClick(View view) {
+
+        // navigate to Process activity
+        Intent intent = new Intent(this, com.fingerprintrecognition.ProcessActivity.class);
+        this.startActivity(intent);
+    }
+
+    /**
+     * Retake the image.
+     *
+     * @param view
+     */
+    private void buttonRetake_OnClick(View view) {
+
+        // hide imageView and show cameraView
+        cameraView.setVisibility(View.VISIBLE);
+        imageView.setVisibility(View.INVISIBLE);
+    }
+
+    /**
+     * Navigate to Settings activity.
+     *
+     * @param view
+     */
+    private void buttonSettings_OnClick(View view) {
+
+        // navigate to Settings activity
+        Intent intent = new Intent(this, com.fingerprintrecognition.SettingsActivity.class);
+        this.startActivity(intent);
+    }
+
+    /**
+     * Process the onTouch event.
+     */
+    private void cameraView_OnTouch(View view, MotionEvent event) {
+
+        // take snapshot
+        Mat snapShot = takeSnapShort();
+        int rows = snapShot.rows();
+        int cols = snapShot.cols();
+        ProcessActivity.MatSnapShot = snapShot;
+        ProcessActivity.MatSnapShotMask = snapShotMask(rows, cols, 10);
+        MatchActivity.MatMatchMask = snapShotMask(rows, cols, 20);
+
+        // set it to the imageView
+        imageView.setImageBitmap(matToBitmap(snapShot));
+
+        // show imageView and hide cameraView
+        cameraView.setVisibility(View.INVISIBLE);
+        imageView.setVisibility(View.VISIBLE);
+    }
+
+    // endregion Private Event Handlers
 
     // region Private Methods
 
@@ -174,10 +327,44 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
         actionBar.setHomeButtonEnabled(true);
         actionBar.setDisplayHomeAsUpEnabled(true);
 
+        maskWidth = 260;
+        maskHeight = 160;
+
+        // processed images
+        processedImages = new HashMap<String, Mat>();
+
+        // get views
+        textViewCounter = (TextView) findViewById(R.id.cameraTextViewCounter);
+        imageView = (ImageView) findViewById(R.id.cameraImageView);
         cameraView = (AppJavaCameraView) findViewById(R.id.cameraCameraView);
+
+        // adjust camera view
         cameraView.setCvCameraViewListener(this);
         cameraView.setFocusable(true);
         cameraView.setFocusableInTouchMode(true);
+
+        // event handlers
+        Button buttonRetake = (Button) findViewById(R.id.cameraButtonRetake);
+        buttonRetake.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonRetake_OnClick(view);
+            }
+        });
+        Button buttonProcess = (Button) findViewById(R.id.cameraButtonProcess);
+        buttonProcess.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonProcess_OnClick(view);
+            }
+        });
+        Button buttonSettings = (Button) findViewById(R.id.cameraButtonSettings);
+        buttonSettings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                buttonSettings_OnClick(view);
+            }
+        });
     }
 
     /**
@@ -188,26 +375,11 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
     private void drawEllipse(Mat img) {
 
         Point center = new Point(cameraSize.width / 2, cameraSize.height / 2);
-        Size axes = new Size(180, 120);
+        Size axes = new Size(maskWidth, maskHeight);
         int thickness = 2;
         int lineType = 8;
 
         Core.ellipse(img, center, axes, 0, 0, 360, AppUtils.ThemeColor, thickness, lineType, 0);
-    }
-
-    /**
-     * Process the onTouch event.
-     */
-    private void processOnTouch() {
-
-        // take snapshot
-        Mat snapShot = takeSnapShort();
-        Mat mask = snapShotMask(snapShot.rows(), snapShot.cols());
-
-        // pass it to the process activity then navigate to it
-        ProcessActivity.MatSnapShot = snapShot;
-        ProcessActivity.MatSnapShotMask = mask;
-        navigateToProcessActivity();
     }
 
     /**
@@ -230,7 +402,7 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
         Mat roi = new Mat(rows, cols, CvType.CV_8UC1);
 
         Point center = new Point(width / 2, height / 2);
-        Size axes = new Size(180, 120);
+        Size axes = new Size(maskWidth, maskHeight);
         Scalar scalarWhite = new Scalar(255, 255, 255);
         Scalar scalarGray = new Scalar(100, 100, 100);
         Scalar scalarBlack = new Scalar(0, 0, 0);
@@ -267,12 +439,13 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
 
     /**
      * Mask used in the snapshot.
+     *
      * @return
      */
-    private Mat snapShotMask(int rows, int cols){
+    private Mat snapShotMask(int rows, int cols, int offset) {
 
         Point center = new Point(cols / 2, rows / 2);
-        Size axes = new Size(170, 110);
+        Size axes = new Size(maskWidth - offset, maskHeight - offset);
         Scalar scalarWhite = new Scalar(255, 255, 255);
         Scalar scalarGray = new Scalar(100, 100, 100);
         Scalar scalarBlack = new Scalar(0, 0, 0);
@@ -281,17 +454,19 @@ public class CameraActivity extends Activity implements OnTouchListener, CvCamer
 
         Mat mask = new Mat(rows, cols, CvType.CV_8UC1, scalarBlack);
         Core.ellipse(mask, center, axes, 0, 0, 360, scalarWhite, thickness, lineType, 0);
-        return  mask;
+        return mask;
     }
 
     /**
-     * Navigate to the 'Main' activity.
+     * Convert Mat image to bitmap image.
+     *
+     * @param image
      */
-    private void navigateToProcessActivity() {
+    private Bitmap matToBitmap(Mat image) {
 
-        // navigate to Process activity
-        Intent intent = new Intent(this, com.fingerprintrecognition.ProcessActivity.class);
-        this.startActivity(intent);
+        Bitmap bitmap = Bitmap.createBitmap(image.cols(), image.rows(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(image, bitmap);
+        return bitmap;
     }
 
     // endregion Private Methods

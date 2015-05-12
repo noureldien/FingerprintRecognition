@@ -1,0 +1,1 @@
+C:\Users\Noureldien\AppData\Local\Android\android-sdk\platform-tools\adb.exe

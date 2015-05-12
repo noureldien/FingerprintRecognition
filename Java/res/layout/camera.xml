@@ -1,11 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              xmlns:tools="http://schemas.android.com/tools"
-              android:orientation="vertical"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
               android:layout_height="match_parent" >
     <com.fingerprintrecognition.app.AppJavaCameraView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:id="@+id/cameraCameraView"/>
-</LinearLayout>
+    <ImageView android:layout_width="match_parent"
+               android:layout_height="match_parent"
+               android:id="@+id/cameraImageView"/>
+    <LinearLayout android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_alignParentBottom="true">
+        <Button android:id="@+id/cameraButtonRetake"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="Retake"/>
+        <Button android:id="@+id/cameraButtonProcess"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="Process"/>
+        <Button android:id="@+id/cameraButtonSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:text="Settings"/>
+        <View android:layout_height="match_parent"
+              android:layout_width="0dp"
+              android:layout_weight="1"/>
+        <RelativeLayout android:layout_width="42dp"
+              android:layout_height="match_parent"
+              android:background="@color/apptheme_color_dark"
+              android:gravity="center_vertical|center_horizontal|center">
+        <TextView android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:id="@+id/cameraTextViewCounter"
+                  android:text="0"/>
+        </RelativeLayout>
+    </LinearLayout>
+</RelativeLayout>

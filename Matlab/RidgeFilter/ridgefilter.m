@@ -43,7 +43,7 @@ function newim = ridgefilter(im, orient, freq, medianFreq, kx, ky)
 
 % Fixed angle increment between filter orientations in
 % degrees. This should divide evenly into 180
-angleInc = 3;
+angleInc = 1;
 filterCount = round(180 / angleInc);
 
 im = double(im);

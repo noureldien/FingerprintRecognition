@@ -4,6 +4,11 @@ clc;
 img1 = imread('./images/sift_3.jpg');
 img2 = imread('./images/sift_4.jpg');
 
+img1 = imread('./images/sift_new_3.jpg');
+img2 = imread('./images/sift_new_4.jpg');
+%img2 = imread('./images/sift_new_5.jpg');
+%img2 = imread('./images/sift_new_2.jpg');
+
 img1 = grayscaleImage(img1);
 img2 = grayscaleImage(img2);
 
@@ -12,6 +17,7 @@ img2 = grayscaleImage(img2);
 [matches, scores] = vl_ubcmatch(d1,d2);
 matchesOk = ransac(f1, f2, matches);
 
+disp(size(matches,2));
 disp(size(matchesOk,2));
 matches = matchesOk;
 
